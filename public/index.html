@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>X-Drone 智能售后支持</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f7fa; }
+        .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; text-align: center; }
+        .chat-box { height: 400px; border: 1px solid #ddd; border-radius: 8px; padding: 15px; overflow-y: auto; margin-bottom: 15px; background: #fafafa; }
+        .message { margin: 10px 0; padding: 10px 15px; border-radius: 15px; max-width: 70%; }
+        .user { background: #3498db; color: white; margin-left: auto; text-align: right; }
+        .ai { background: #ecf0f1; color: #2c3e50; margin-right: auto; }
+        .input-area { display: flex; gap: 10px; }
+        input, textarea { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 6px; }
+        button { padding: 12px 24px; background: #2ecc71; color: white; border: none; border-radius: 6px; cursor: pointer; }
+        button:hover { background: #27ae60; }
+        .tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid #eee; }
+        .tab { padding: 10px 20px; cursor: pointer; color: #7f8c8d; }
+        .tab.active { color: #3498db; border-bottom: 2px solid #3498db; font-weight: bold; }
+        .hidden { display: none; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 14px; }
+        th { background-color: #f2f2f2; }
+        .new-session-btn { background: #3498db; margin-left: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚁 X-Drone 售后支持</h1>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab(event, 'chat')">智能客服</div>
+            <div class="tab" onclick="switchTab(event, 'admin')">后台管理</div>
+        </div>
+
+        <div id="chat-view">
+            <div class="chat-box" id="chatBox"></div>
+            <div class="input-area">
+                <input type="text" id="userInput" placeholder="请输入您的无人机问题..." onkeypress="if(event.key==='Enter') sendMessage()">
+                <button onclick="sendMessage()">发送</button>
+                <button class="new-session-btn" onclick="newSession()">新会话</button>
+            </div>
+        </div>
+
+        <div id="admin-view" class="hidden">
+            <h3>📊 最近对话记录</h3>
+            <table id="logTable">
+                <thead><tr><th>时间</th><th>用户ID</th><th>会话ID</th><th>提问</th><th>AI回复</th></tr></thead>
+                <tbody></tbody>
+            </table>
+            <h3>📚 FAQ 管理</h3>
+            <div class="input-area">
+                <input type="text" id="faqQ" placeholder="问题">
+                <input type="text" id="faqA" placeholder="答案">
+                <button onclick="addFaq()">添加/更新</button>
+            </div>
+            <table id="faqTable">
+                <thead><tr><th>问题</th><th>答案</th><th>操作</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // 后端 API 地址 - 部署到 Railway 后必须修改为实际地址
+        // 本地开发时自动使用相对路径
+        const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+            ? ''
+            : 'https://你的后端地址.railway.app';   // ⚠️ 替换为 Railway 实际域名
+
+        const userId = 'user_' + Math.random().toString(36).substr(2, 9);
+
+        let sessionId = localStorage.getItem('sessionId');
+        if (!sessionId) {
+            sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('sessionId', sessionId);
+        }
+
+        function newSession() {
+            localStorage.removeItem('sessionId');
+            location.reload();
+        }
+
+        function switchTab(event, tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            if (tab === 'chat') {
+                document.getElementById('chat-view').classList.remove('hidden');
+                document.getElementById('admin-view').classList.add('hidden');
+            } else {
+                document.getElementById('chat-view').classList.add('hidden');
+                document.getElementById('admin-view').classList.remove('hidden');
+                loadAdminData();
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+
+            const chatBox = document.getElementById('chatBox');
+            chatBox.innerHTML += `<div class="message user">${escapeHtml(msg)}</div>`;
+            input.value = '';
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/chat`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        user_id: userId,
+                        session_id: sessionId,
+                        message: msg
+                    })
+                });
+                const data = await res.json();
+                if (data.response) {
+                    chatBox.innerHTML += `<div class="message ai">${escapeHtml(data.response)}</div>`;
+                } else if (data.detail) {
+                    chatBox.innerHTML += `<div class="message ai">错误：${escapeHtml(data.detail)}</div>`;
+                } else {
+                    chatBox.innerHTML += `<div class="message ai">抱歉，我暂时无法回答，请稍后再试。</div>`;
+                }
+            } catch (err) {
+                chatBox.innerHTML += `<div class="message ai">网络错误，请稍后再试。</div>`;
+            }
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function loadAdminData() {
+            try {
+                const logs = await fetch(`${API_BASE}/api/admin/conversations`).then(r => r.json());
+                const logBody = document.querySelector('#logTable tbody');
+                logBody.innerHTML = logs.map(l => `<tr>
+                    <td>${escapeHtml(l.timestamp)}</td>
+                    <td>${escapeHtml(l.user_id)}</td>
+                    <td>${escapeHtml(l.session_id)}</td>
+                    <td>${escapeHtml(l.user_message)}</td>
+                    <td>${escapeHtml(l.ai_reply)}</td>
+                </tr>`).join('');
+            } catch(e) { console.error(e); }
+
+            try {
+                const faqs = await fetch(`${API_BASE}/api/admin/faqs`).then(r => r.json());
+                const faqBody = document.querySelector('#faqTable tbody');
+                faqBody.innerHTML = faqs.map(f => `<tr>
+                    <td>${escapeHtml(f.question)}</td>
+                    <td>${escapeHtml(f.answer)}</td>
+                    <td><button onclick="deleteFaq('${f.question.replace(/'/g, "\\'")}')" style="background:#e74c3c;padding:5px 10px;">删除</button></td>
+                </tr>`).join('');
+            } catch(e) { console.error(e); }
+        }
+
+        async function addFaq() {
+            const q = document.getElementById('faqQ').value.trim();
+            const a = document.getElementById('faqA').value.trim();
+            if (!q || !a) return;
+            await fetch(`${API_BASE}/api/admin/faqs`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ question: q, answer: a })
+            });
+            document.getElementById('faqQ').value = '';
+            document.getElementById('faqA').value = '';
+            loadAdminData();
+        }
+
+        async function deleteFaq(q) {
+            await fetch(`${API_BASE}/api/admin/faqs?question=${encodeURIComponent(q)}`, { method: 'DELETE' });
+            loadAdminData();
+        }
+    </script>
+</body>
+</html>
