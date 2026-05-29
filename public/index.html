@@ -64,11 +64,8 @@
     </div>
 
     <script>
-        // 后端 API 地址 - 部署到 Railway 后必须修改为实际地址
-        // 本地开发时自动使用相对路径
-        const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-            ? ''
-            : 'https://你的后端地址.railway.app';   // ⚠️ 替换为 Railway 实际域名
+        // ✅ 关键修改：始终使用相对路径，因为前后端同域
+        const API_BASE = '';
 
         const userId = 'user_' + Math.random().toString(36).substr(2, 9);
 
@@ -125,6 +122,7 @@
                     chatBox.innerHTML += `<div class="message ai">抱歉，我暂时无法回答，请稍后再试。</div>`;
                 }
             } catch (err) {
+                console.error(err);
                 chatBox.innerHTML += `<div class="message ai">网络错误，请稍后再试。</div>`;
             }
             chatBox.scrollTop = chatBox.scrollHeight;
@@ -140,7 +138,7 @@
             try {
                 const logs = await fetch(`${API_BASE}/api/admin/conversations`).then(r => r.json());
                 const logBody = document.querySelector('#logTable tbody');
-                logBody.innerHTML = logs.map(l => `<tr>
+                logBody.innerHTML = logs.map(l => `<td>
                     <td>${escapeHtml(l.timestamp)}</td>
                     <td>${escapeHtml(l.user_id)}</td>
                     <td>${escapeHtml(l.session_id)}</td>
@@ -156,7 +154,7 @@
                     <td>${escapeHtml(f.question)}</td>
                     <td>${escapeHtml(f.answer)}</td>
                     <td><button onclick="deleteFaq('${f.question.replace(/'/g, "\\'")}')" style="background:#e74c3c;padding:5px 10px;">删除</button></td>
-                </tr>`).join('');
+                </table>`).join('');
             } catch(e) { console.error(e); }
         }
 
