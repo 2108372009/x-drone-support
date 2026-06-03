@@ -15,7 +15,6 @@ class ChatRequest(BaseModel):
     user_id: str
     session_id: str
 
-# 读取知识库系统提示
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 knowledge_path = os.path.join(base_dir, "knowledge_base.txt")
 with open(knowledge_path, "r", encoding="utf-8") as f:
@@ -121,10 +120,8 @@ def get_user_history(user_id: str, db: Session = Depends(get_db)):
         "session_id": c.session_id
     } for c in convs]
 
-# 新增：订单查询接口（模拟数据）
 @router.get("/order")
 def query_order(order_id: str):
-    """模拟订单查询，实际使用时请对接真实订单系统"""
     mock_orders = {
         "XD123456789": {
             "order_id": "XD123456789",
