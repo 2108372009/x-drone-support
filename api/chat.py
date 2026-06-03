@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List
 from .database import get_db
-from .db import Conversation, FAQ   # 导入 FAQ 模型
+from .db import Conversation, FAQ
 
 router = APIRouter()
 
@@ -36,9 +36,7 @@ def get_conversation_history(db: Session, user_id: str, session_id: str, limit: 
     return messages
 
 def find_faq_match(db: Session, user_message: str) -> str | None:
-    """在 faqs 表中查找匹配的问题，返回答案；未找到返回 None"""
     msg_lower = user_message.lower().strip()
-    # 获取所有 FAQ
     all_faqs = db.query(FAQ).all()
     for faq in all_faqs:
         if faq.question.lower() in msg_lower or msg_lower in faq.question.lower():
@@ -47,11 +45,9 @@ def find_faq_match(db: Session, user_message: str) -> str | None:
 
 @router.post("/chat")
 def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
-    # 1. 优先匹配 FAQ 表
     faq_answer = find_faq_match(db, request.message)
     if faq_answer:
         ai_message = faq_answer
-        # 仍然保存对话记录
         conv = Conversation(
             id=str(uuid.uuid4()),
             user_id=request.user_id,
@@ -63,7 +59,6 @@ def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
         db.commit()
         return {"response": ai_message}
 
-    # 2. 没有匹配到 FAQ 时，走原有流程（历史 + DeepSeek API）
     history_messages = get_conversation_history(db, request.user_id, request.session_id, limit=5)
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.extend(history_messages)
@@ -90,7 +85,6 @@ def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
             print(f"DeepSeek API 调用失败: {e}")
             ai_message = fallback_reply(request.message)
 
-    # 保存对话记录
     conv = Conversation(
         id=str(uuid.uuid4()),
         user_id=request.user_id,
@@ -115,3 +109,49 @@ def fallback_reply(message: str) -> str:
         return "整机保修1年，电池保修6个月，人为损坏不在保修范围内。"
     else:
         return f"您好，我是X-Drone售后助手。您的问题是：“{message}”。我会尽力为您解答。如需更多帮助，请拨打客服热线。"
+
+@router.get("/history")
+def get_user_history(user_id: str, db: Session = Depends(get_db)):
+    convs = db.query(Conversation).filter(Conversation.user_id == user_id).order_by(Conversation.timestamp.desc()).limit(100).all()
+    return [{
+        "id": c.id,
+        "timestamp": c.timestamp.isoformat(),
+        "user_message": c.user_message,
+        "ai_reply": c.ai_reply,
+        "session_id": c.session_id
+    } for c in convs]
+
+# 新增：订单查询接口（模拟数据）
+@router.get("/order")
+def query_order(order_id: str):
+    """模拟订单查询，实际使用时请对接真实订单系统"""
+    mock_orders = {
+        "XD123456789": {
+            "order_id": "XD123456789",
+            "status": "已发货",
+            "product": "X-Drone Mini 标准套装",
+            "amount": "¥3,499",
+            "tracking_no": "SF1234567890",
+            "logistics": "顺丰速运"
+        },
+        "XD987654321": {
+            "order_id": "XD987654321",
+            "status": "已签收",
+            "product": "X-Drone Pro 畅飞套装",
+            "amount": "¥9,999",
+            "tracking_no": "SF9876543210",
+            "logistics": "顺丰速运"
+        },
+        "XD555555555": {
+            "order_id": "XD555555555",
+            "status": "待发货",
+            "product": "X-Care 随心换 1年版",
+            "amount": "¥399",
+            "tracking_no": None,
+            "logistics": None
+        }
+    }
+    if order_id in mock_orders:
+        return mock_orders[order_id]
+    else:
+        return {"error": "未找到该订单，请确认订单号是否正确"}
