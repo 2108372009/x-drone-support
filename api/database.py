@@ -3,10 +3,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# 从环境变量读取数据库 URL，默认为 SQLite（本地开发）
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./local_database.db")
 
-# 根据不同数据库配置连接参数
 connect_args = {}
 if DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
