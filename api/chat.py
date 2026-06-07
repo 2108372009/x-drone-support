@@ -1,10 +1,13 @@
 import os
 import uuid
+import time
 import requests
+from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List
+from datetime import datetime, timezone
 from .database import get_db
 from .db import Conversation, FAQ
 
@@ -22,6 +25,9 @@ with open(knowledge_path, "r", encoding="utf-8") as f:
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+
+# 内存限流：记录每个用户或会话的最后发言时间
+_user_last_time = defaultdict(float)
 
 def get_conversation_history(db: Session, user_id: str, session_id: str, limit: int = 5) -> List[dict]:
     history = db.query(Conversation).filter(
@@ -44,6 +50,14 @@ def find_faq_match(db: Session, user_message: str) -> str | None:
 
 @router.post("/chat")
 def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
+    # ---------- 1. 限流检查（内存实现，3秒间隔） ----------
+    key = request.user_id if request.user_id != 'guest' else request.session_id
+    now = time.time()
+    if key in _user_last_time and now - _user_last_time[key] < 3:
+        raise HTTPException(status_code=429, detail="亲，您发言太频繁啦，请休息3秒后再试～")
+    _user_last_time[key] = now
+
+    # ---------- 2. FAQ 匹配 ----------
     faq_answer = find_faq_match(db, request.message)
     if faq_answer:
         ai_message = faq_answer
@@ -58,11 +72,13 @@ def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
         db.commit()
         return {"response": ai_message}
 
+    # ---------- 3. 构建对话历史 ----------
     history_messages = get_conversation_history(db, request.user_id, request.session_id, limit=5)
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.extend(history_messages)
     messages.append({"role": "user", "content": request.message})
 
+    # ---------- 4. 调用 LLM 或 fallback ----------
     if not DEEPSEEK_API_KEY:
         ai_message = fallback_reply(request.message)
     else:
@@ -84,6 +100,7 @@ def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
             print(f"DeepSeek API 调用失败: {e}")
             ai_message = fallback_reply(request.message)
 
+    # ---------- 5. 保存对话 ----------
     conv = Conversation(
         id=str(uuid.uuid4()),
         user_id=request.user_id,

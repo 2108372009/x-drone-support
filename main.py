@@ -20,7 +20,6 @@ from api.db import Product
 async def lifespan(app: FastAPI):
     print("🚀 正在启动服务...")
     Base.metadata.create_all(bind=engine)
-    # 初始化商品数据
     db = SessionLocal()
     try:
         if db.query(Product).count() == 0:

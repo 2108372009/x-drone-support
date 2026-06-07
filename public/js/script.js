@@ -145,6 +145,17 @@ async function sendMessage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ user_id: currentUserId || 'guest', session_id: sessionId, message: msg })
         });
+        if (!res.ok) {
+            removeTypingIndicator();
+            if (res.status === 429) {
+                const errData = await res.json();
+                addMessage('ai', errData.detail || '操作过于频繁，请稍后再试。', false);
+            } else {
+                const errData = await res.json();
+                addMessage('ai', errData.detail || '请求失败，请重试。', false);
+            }
+            return;
+        }
         const data = await res.json();
         removeTypingIndicator();
         let reply = data.response || data.detail || "抱歉，我暂时无法回答。";
@@ -190,6 +201,11 @@ async function loadProducts() {
 
 window.buyProduct = async (productId) => {
     if (!currentToken) { alert('请先登录或注册'); showLoginModal(); return; }
+    // 前端简易游客提醒（可选，后端已有拦截）
+    if (localStorage.getItem('is_guest') === 'true') {
+        alert('亲，游客模式不能购物，请先注册/登录账号再进行购买哦～');
+        return;
+    }
     const qtyInput = document.getElementById(`qty-${productId}`);
     const quantity = parseInt(qtyInput.value) || 1;
     try {
@@ -262,6 +278,8 @@ async function handleLogin() {
         if (res.ok) {
             const data = await res.json();
             storeAuth(data.token, data.user_id, data.username);
+            // 清除游客标记
+            localStorage.removeItem('is_guest');
             closeLoginModal();
             loadProducts();
             if (document.querySelector('.tab.active')?.getAttribute('data-tab') === 'orders') loadOrders();
@@ -286,7 +304,6 @@ async function handleRegister() {
         return;
     }
 
-    // 密码复杂度校验：必须同时包含字母和数字，且长度至少6位
     const hasLetter = /[a-zA-Z]/.test(password);
     const hasNumber = /\d/.test(password);
     if (!hasLetter || !hasNumber || password.length < 6) {
@@ -303,6 +320,7 @@ async function handleRegister() {
         if (res.ok) {
             const data = await res.json();
             storeAuth(data.token, data.user_id, data.username);
+            localStorage.removeItem('is_guest');
             closeLoginModal();
             loadProducts();
             if (document.querySelector('.tab.active')?.getAttribute('data-tab') === 'orders') loadOrders();
@@ -321,6 +339,7 @@ async function guestLogin() {
         const res = await fetch(`${API_BASE}/api/auth/guest`, { method: 'POST' });
         const data = await res.json();
         storeAuth(data.token, data.user_id, data.username);
+        localStorage.setItem('is_guest', 'true');
         closeLoginModal();
         loadProducts();
         if (document.querySelector('.tab.active')?.getAttribute('data-tab') === 'orders') loadOrders();
@@ -339,7 +358,6 @@ async function fetchWithAdminToken(url, options = {}) {
             setAdminToken(pwd);
             token = pwd;
         } else {
-            // 密码错误，明确提示并抛出错误，外部调用会捕获
             alert("权限不够拒绝访问");
             throw new Error("Unauthorized");
         }
@@ -408,7 +426,6 @@ function switchTab(tabId) {
     const adminView = document.getElementById('adminView');
     const tabs = document.querySelectorAll('.tab');
 
-    // 先隐藏所有视图
     chatMain.classList.add('hidden');
     shopView.classList.add('hidden');
     ordersView.classList.add('hidden');
@@ -423,7 +440,6 @@ function switchTab(tabId) {
         ordersView.classList.remove('hidden');
         loadOrders();
     } else if (tabId === 'admin') {
-        // 管理员认证：如果没有 token 则弹窗验证
         let token = getAdminToken();
         if (!token) {
             const pwd = prompt("请输入管理员密码：");
@@ -432,27 +448,20 @@ function switchTab(tabId) {
                 token = pwd;
             } else {
                 alert("权限不够拒绝访问");
-                // 保持当前视图，不切换到 admin，并且保留原活动标签的高亮
-                // 恢复之前的活动标签（重新激活当前活动的标签页）
                 const activeTab = document.querySelector('.tab.active');
                 if (activeTab) {
                     const currentTabId = activeTab.getAttribute('data-tab');
-                    // 重新显示当前活动的视图
                     if (currentTabId === 'chat') chatMain.classList.remove('hidden');
                     else if (currentTabId === 'shop') { shopView.classList.remove('hidden'); loadProducts(); }
                     else if (currentTabId === 'orders') { ordersView.classList.remove('hidden'); loadOrders(); }
-                    // admin 失败，不显示 admin 视图
                 }
-                // 高亮不变，直接返回
                 return;
             }
         }
-        // 验证通过，显示 admin 视图
         adminView.classList.remove('hidden');
         loadAdminData();
     }
 
-    // 更新标签高亮
     tabs.forEach(tab => {
         if (tab.getAttribute('data-tab') === tabId) {
             tab.classList.add('active');
