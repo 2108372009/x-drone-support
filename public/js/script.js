@@ -4,7 +4,6 @@ const API_BASE = '';
 let currentToken = localStorage.getItem('auth_token');
 let currentUserId = localStorage.getItem('user_id');
 let currentUsername = localStorage.getItem('username');
-let isGuest = localStorage.getItem('is_guest') === 'true';   // 游客标识
 
 let sessionId = localStorage.getItem('sessionId');
 if (!sessionId) {
@@ -68,9 +67,9 @@ function safeParseDate(dateStr) {
     return null;
 }
 
-// 游客限制：如果未登录或为游客，弹出提示并返回 false
+// 未登录拦截
 function requireLogin() {
-    if (!currentToken || isGuest) {
+    if (!currentToken) {
         alert('请先注册/登录账号再进行此操作');
         showLoginModal();
         return false;
@@ -94,11 +93,9 @@ function storeAuth(token, userId, username) {
     currentToken = token;
     currentUserId = userId;
     currentUsername = username;
-    isGuest = false;
     localStorage.setItem('auth_token', token);
     localStorage.setItem('user_id', userId);
     localStorage.setItem('username', username);
-    localStorage.setItem('is_guest', 'false');
     updateUserUI();
 }
 
@@ -106,11 +103,9 @@ function clearAuth() {
     currentToken = null;
     currentUserId = null;
     currentUsername = null;
-    isGuest = false;
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_id');
     localStorage.removeItem('username');
-    localStorage.removeItem('is_guest');
     updateUserUI();
 }
 
@@ -202,13 +197,9 @@ function sendWelcomeMessage() {
     addMessage('ai', welcomeMsg, false);
 }
 
-// ==================== 历史对话 ====================
+// ==================== 历史对话（需登录） ====================
 async function showHistoryModal() {
-    if (!currentToken || isGuest) {
-        alert('请先注册/登录查看您的历史对话');
-        showLoginModal();
-        return;
-    }
+    if (!requireLogin()) return;
     const bodyDiv = document.getElementById('historyModalBody');
     bodyDiv.innerHTML = '加载中...';
     historyModal.style.display = 'flex';
@@ -244,7 +235,6 @@ function closeOrderModal() { orderModal.style.display = 'none'; }
 
 // ==================== 商城模块 ====================
 async function loadProducts() {
-    console.log('加载商品列表');
     try {
         const res = await fetch(`${API_BASE}/api/shop/products`);
         const products = await res.json();
@@ -272,13 +262,7 @@ async function loadProducts() {
 }
 
 async function buyProduct(productId) {
-    console.log('buyProduct 被调用，商品ID：', productId);
-    // 游客限制
-    if (!currentToken || isGuest) {
-        alert('请先注册/登录再进行购买');
-        showLoginModal();
-        return;
-    }
+    if (!requireLogin()) return;
     const qtyInput = document.getElementById(`qty-${productId}`);
     if (!qtyInput) { console.error('找不到数量输入框'); return; }
     const quantity = parseInt(qtyInput.value) || 1;
@@ -301,10 +285,9 @@ async function buyProduct(productId) {
     } catch(e) { alert('网络错误'); }
 }
 
-// ==================== 订单模块 ====================
+// ==================== 订单模块（需登录） ====================
 async function loadOrders() {
-    console.log('加载订单');
-    if (!currentToken || isGuest) {
+    if (!requireLogin()) {
         document.getElementById('ordersList').innerHTML = '<p>请先登录查看订单</p>';
         return;
     }
@@ -315,15 +298,8 @@ async function loadOrders() {
         const container = document.getElementById('ordersList');
         if (!orders.length) { container.innerHTML = '<p>暂无订单</p>'; return; }
         container.innerHTML = orders.map(o => {
-            // 修复Invalid Date问题
-            let dateObj = null;
-            let dateStr = '时间未知';
-            if (o.created_at) {
-                dateObj = new Date(o.created_at);
-                if (!isNaN(dateObj.getTime())) {
-                    dateStr = dateObj.toLocaleString();
-                }
-            }
+            const dateObj = safeParseDate(o.created_at);
+            const dateStr = dateObj ? dateObj.toLocaleString() : '时间未知';
             return `
                 <div class="order-item">
                     <div><strong>${escapeHtml(o.product_name)}</strong> × ${o.quantity}</div>
@@ -371,8 +347,6 @@ async function handleLogin() {
         if (res.ok) {
             const data = await res.json();
             storeAuth(data.token, data.user_id, data.username);
-            localStorage.removeItem('is_guest');
-            isGuest = false;
             closeLoginModal();
             loadProducts();
             if (document.querySelector('.tab.active')?.getAttribute('data-tab') === 'orders') loadOrders();
@@ -413,8 +387,6 @@ async function handleRegister() {
         if (res.ok) {
             const data = await res.json();
             storeAuth(data.token, data.user_id, data.username);
-            localStorage.removeItem('is_guest');
-            isGuest = false;
             closeLoginModal();
             loadProducts();
             if (document.querySelector('.tab.active')?.getAttribute('data-tab') === 'orders') loadOrders();
@@ -428,79 +400,20 @@ async function handleRegister() {
     }
 }
 
-async function guestLogin() {
-    try {
-        const res = await fetch(`${API_BASE}/api/auth/guest`, { method: 'POST' });
-        const data = await res.json();
-        storeAuth(data.token, data.user_id, data.username);
-        isGuest = true;
-        localStorage.setItem('is_guest', 'true');
-        closeLoginModal();
-        loadProducts();
-    } catch(e) { alert('游客登录失败'); }
-}
-
-// ==================== 后台管理（增强版） ====================
+// ==================== 后台管理 ====================
 function getAdminToken() { return sessionStorage.getItem('admin_token'); }
 function setAdminToken(token) { sessionStorage.setItem('admin_token', token); }
-
-// 使用模态框代替原生 prompt
-let adminPasswordResolver = null;
-let adminPasswordRejecter = null;
-
-function showAdminPasswordModal() {
-    return new Promise((resolve, reject) => {
-        adminPasswordResolver = resolve;
-        adminPasswordRejecter = reject;
-        const modal = document.getElementById('adminPasswordModal');
-        const input = document.getElementById('adminPasswordInput');
-        const confirmBtn = document.getElementById('confirmAdminBtn');
-        const cancelBtn = document.getElementById('cancelAdminBtn');
-        const closeBtn = document.getElementById('closeAdminPwdBtn');
-
-        input.value = '';
-        modal.style.display = 'flex';
-
-        const cleanup = () => {
-            modal.style.display = 'none';
-            confirmBtn.removeEventListener('click', onClickConfirm);
-            cancelBtn.removeEventListener('click', onClickCancel);
-            closeBtn.removeEventListener('click', onClickCancel);
-            adminPasswordResolver = null;
-            adminPasswordRejecter = null;
-        };
-
-        const onClickConfirm = () => {
-            const pwd = input.value;
-            if (pwd === "1234") {
-                cleanup();
-                resolve(pwd);
-            } else {
-                alert("密码错误，请重试");
-                input.value = '';
-                input.focus();
-            }
-        };
-
-        const onClickCancel = () => {
-            cleanup();
-            reject(new Error("用户取消授权"));
-        };
-
-        confirmBtn.addEventListener('click', onClickConfirm);
-        cancelBtn.addEventListener('click', onClickCancel);
-        closeBtn.addEventListener('click', onClickCancel);
-    });
-}
 
 async function fetchWithAdminToken(url, options = {}) {
     let token = getAdminToken();
     if (!token) {
-        try {
-            token = await showAdminPasswordModal();
-            setAdminToken(token);
-        } catch (e) {
-            throw new Error("需要管理员权限才能继续");
+        const pwd = prompt("请输入管理员密码：");
+        if (pwd === "1234") {
+            setAdminToken(pwd);
+            token = pwd;
+        } else {
+            alert("权限不够，拒绝访问");
+            throw new Error("Unauthorized");
         }
     }
     const headers = { ...options.headers, 'X-Admin-Token': token };
@@ -508,20 +421,12 @@ async function fetchWithAdminToken(url, options = {}) {
 }
 
 async function loadProductManagement() {
-    console.log('加载商品管理数据');
     try {
         const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products`);
-        if (!res.ok) {
-            console.error('商品列表请求失败', res.status);
-            throw new Error(`HTTP ${res.status}`);
-        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const products = await res.json();
-        console.log('商品数据：', products);
         const tbody = document.querySelector('#productTable tbody');
-        if (!tbody) {
-            console.error('找不到 productTable tbody');
-            return;
-        }
+        if (!tbody) return;
         if (products.length === 0) {
             tbody.innerHTML = '<tr><td colspan="4">暂无商品，请点击“上架新产品”添加</td></tr>';
             return;
@@ -536,18 +441,16 @@ async function loadProductManagement() {
                     <button class="small" onclick="adjustStock('${p.id}', -1)">-1</button>
                     <button class="small" onclick="adjustStock('${p.id}', 10)">+10</button>
                     <button class="small" onclick="adjustStock('${p.id}', -10)">-10</button>
-                    <button class="small" style="background:#dc3545;" onclick="deleteProduct('${p.id}')">下架</button>
-                </td>
-            </tr>
+                 </td>
+             </tr>
         `).join('');
     } catch(e) {
-        console.error('加载商品列表失败：', e);
+        console.error(e);
         alert('加载商品列表失败，请检查管理员密码是否正确或网络连接');
     }
 }
 
 window.adjustStock = async (productId, delta) => {
-    console.log('调整库存', productId, delta);
     try {
         const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products/${productId}/stock`, {
             method: 'PATCH',
@@ -565,29 +468,7 @@ window.adjustStock = async (productId, delta) => {
     } catch(e) { alert('网络错误'); }
 };
 
-// 新增下架商品函数
-window.deleteProduct = async (productId) => {
-    if (!confirm("确定要下架该商品吗？删除后不可恢复，已购买订单不受影响。")) return;
-    try {
-        const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products/${productId}`, {
-            method: 'DELETE'
-        });
-        if (res.ok) {
-            alert("商品已下架");
-            loadProductManagement();
-            loadProducts();
-        } else {
-            const err = await res.json();
-            alert("下架失败：" + (err.detail || "未知错误"));
-        }
-    } catch(e) {
-        console.error(e);
-        alert("网络错误或权限验证失败");
-    }
-};
-
 window.addNewProduct = async () => {
-    console.log('addNewProduct 函数被调用');
     const name = document.getElementById('newProdName').value.trim();
     const description = document.getElementById('newProdDesc').value.trim();
     const price = document.getElementById('newProdPrice').value.trim();
@@ -599,7 +480,6 @@ window.addNewProduct = async () => {
         return;
     }
     if (!imageUrl) imageUrl = '/static/drone.jpg';
-    console.log('提交新产品数据：', { name, description, price, priceValue, stock, imageUrl });
     try {
         const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products`, {
             method: 'POST',
@@ -620,11 +500,10 @@ window.addNewProduct = async () => {
             const err = await res.json();
             alert('上架失败：' + (err.detail || '未知错误'));
         }
-    } catch(e) { console.error(e); alert('网络错误'); }
+    } catch(e) { alert('网络错误'); }
 };
 
 async function loadAdminData() {
-    console.log('加载后台数据');
     try {
         const logsResp = await fetchWithAdminToken(`${API_BASE}/api/admin/conversations`);
         const logs = await logsResp.json();
@@ -636,7 +515,7 @@ async function loadAdminData() {
                 <td>${escapeHtml(l.session_id)}</td>
                 <td>${escapeHtml(l.user_message)}</td>
                 <td>${escapeHtml(l.ai_reply)}</td>
-            </tr>
+             </tr>
         `).join('');
     } catch(e) { console.error(e); alert("加载对话记录失败"); }
     try {
@@ -648,7 +527,7 @@ async function loadAdminData() {
                 <td>${escapeHtml(f.question)}</td>
                 <td>${escapeHtml(f.answer)}</td>
                 <td><button class="delete-btn" onclick="deleteFaq('${f.question.replace(/'/g, "\\'")}')">删除</button></td>
-            </tr>
+             </tr>
         `).join('');
     } catch(e) { alert("加载FAQ失败"); }
     await loadProductManagement();
@@ -677,7 +556,7 @@ window.addFaq = async function() {
     } catch(e) { alert("添加失败"); }
 };
 
-// ==================== 页面切换（修复卡顿和回退） ====================
+// ==================== 页面切换 ====================
 function switchTab(tabId) {
     const chatMain = document.getElementById('chatMain');
     const shopView = document.getElementById('shopView');
@@ -685,13 +564,11 @@ function switchTab(tabId) {
     const adminView = document.getElementById('adminView');
     const tabs = document.querySelectorAll('.tab');
 
-    // 先隐藏所有视图
     chatMain.classList.add('hidden');
     shopView.classList.add('hidden');
     ordersView.classList.add('hidden');
     adminView.classList.add('hidden');
 
-    // 更新标签激活样式
     tabs.forEach(tab => {
         if (tab.getAttribute('data-tab') === tabId) {
             tab.classList.add('active');
@@ -700,7 +577,6 @@ function switchTab(tabId) {
         }
     });
 
-    // 根据选中的标签显示对应视图并加载数据
     if (tabId === 'chat') {
         chatMain.classList.remove('hidden');
     } else if (tabId === 'shop') {
@@ -714,11 +590,15 @@ function switchTab(tabId) {
         ordersView.classList.remove('hidden');
         loadOrders();
     } else if (tabId === 'admin') {
+        if (!requireLogin()) {
+            switchTab('chat');
+            return;
+        }
         adminView.classList.remove('hidden');
         const productTbody = document.querySelector('#productTable tbody');
         if (productTbody) productTbody.innerHTML = '<tr><td colspan="4">加载中...</td></tr>';
         loadAdminData().catch(err => {
-            console.error('加载后台数据失败', err);
+            console.error(err);
             alert('加载后台数据失败，请检查管理员密码或网络');
         });
     }
@@ -748,7 +628,6 @@ function safeAddEventListener(id, event, handler) {
 }
 
 function init() {
-    console.log('✅ init 已执行');
     updateUserUI();
 
     if (sendBtn) sendBtn.addEventListener('click', sendMessage);
@@ -771,15 +650,11 @@ function init() {
         document.getElementById('loginForm').style.display = 'block';
         document.getElementById('registerForm').style.display = 'none';
     });
-    safeAddEventListener('guestLoginBtn', 'click', guestLogin);
     safeAddEventListener('addFaqBtn', 'click', window.addFaq);
 
     const addProductBtn = document.getElementById('addProductBtn');
     if (addProductBtn) {
-        addProductBtn.addEventListener('click', () => {
-            console.log('上架新产品按钮被点击');
-            window.addNewProduct();
-        });
+        addProductBtn.addEventListener('click', () => window.addNewProduct());
     } else {
         console.error('找不到 addProductBtn 元素');
     }

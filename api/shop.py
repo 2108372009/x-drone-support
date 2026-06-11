@@ -41,7 +41,6 @@ class PurchaseRequest(BaseModel):
 
 @router.post("/purchase")
 def purchase(req: PurchaseRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # 游客禁止购买
     if user.is_guest == "1":
         raise HTTPException(status_code=403, detail="亲，游客模式不能购物，请先注册/登录账号再进行购买哦～")
 
@@ -74,12 +73,10 @@ def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_
         Order.created_at.desc()).all()
     result = []
     for o in orders:
-        # 确保 created_at 不为 None，并转为 ISO 格式字符串
         if o.created_at:
             if hasattr(o.created_at, 'isoformat'):
                 created_at_str = o.created_at.isoformat()
             else:
-                # 如果是字符串，尝试解析
                 try:
                     from datetime import datetime
                     dt = datetime.fromisoformat(str(o.created_at))
