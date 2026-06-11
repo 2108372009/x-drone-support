@@ -27,4 +27,3 @@ env/
 
 # 部署相关临时目录（如果本地有）
 .railway/
-.vercel/

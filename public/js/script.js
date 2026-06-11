@@ -177,7 +177,37 @@ function sendWelcomeMessage() {
     addMessage('ai', welcomeMsg, false);
 }
 
-// ==================== 商城模块 ====================
+// ==================== 历史对话（带认证） ====================
+async function showHistoryModal() {
+    if (!currentToken) {
+        alert('请先登录或注册查看您的历史对话');
+        showLoginModal();
+        return;
+    }
+    const bodyDiv = document.getElementById('historyModalBody');
+    bodyDiv.innerHTML = '加载中...';
+    historyModal.style.display = 'flex';
+    try {
+        const res = await fetch(`${API_BASE}/api/history`, {
+            headers: { 'Authorization': `Bearer ${currentToken}` }
+        });
+        if (!res.ok) throw new Error('认证失败');
+        const history = await res.json();
+        if (!history.length) { bodyDiv.innerHTML = '<p>暂无历史记录</p>'; return; }
+        let html = '';
+        for (let item of history) {
+            html += `<div class="history-item"><div class="history-time">${formatLocalTime(item.timestamp)}</div><div class="history-q"><strong>问：</strong>${escapeHtml(item.user_message)}</div><div class="history-a"><strong>答：</strong>${escapeHtml(item.ai_reply)}</div></div>`;
+        }
+        bodyDiv.innerHTML = html;
+    } catch(e) {
+        bodyDiv.innerHTML = '<p>加载失败，请确保已登录</p>';
+    }
+}
+function closeHistoryModal() { historyModal.style.display = 'none'; }
+function showOrderModal() { orderModal.style.display = 'flex'; document.getElementById('orderIdInput').value = ''; document.getElementById('orderResult').innerHTML = ''; }
+function closeOrderModal() { orderModal.style.display = 'none'; }
+
+// ==================== 商城模块（购买确认弹窗） ====================
 async function loadProducts() {
     try {
         const res = await fetch(`${API_BASE}/api/shop/products`);
@@ -201,13 +231,15 @@ async function loadProducts() {
 
 window.buyProduct = async (productId) => {
     if (!currentToken) { alert('请先登录或注册'); showLoginModal(); return; }
-    // 前端简易游客提醒（可选，后端已有拦截）
     if (localStorage.getItem('is_guest') === 'true') {
         alert('亲，游客模式不能购物，请先注册/登录账号再进行购买哦～');
         return;
     }
     const qtyInput = document.getElementById(`qty-${productId}`);
     const quantity = parseInt(qtyInput.value) || 1;
+    // 购买确认弹窗
+    const confirmMsg = `确认购买此商品吗？\n数量：${quantity}`;
+    if (!confirm(confirmMsg)) return;
     try {
         const res = await fetch(`${API_BASE}/api/shop/purchase`, {
             method: 'POST',
@@ -278,7 +310,6 @@ async function handleLogin() {
         if (res.ok) {
             const data = await res.json();
             storeAuth(data.token, data.user_id, data.username);
-            // 清除游客标记
             localStorage.removeItem('is_guest');
             closeLoginModal();
             loadProducts();
@@ -346,7 +377,7 @@ async function guestLogin() {
     } catch(e) { alert('游客登录失败'); }
 }
 
-// ==================== 后台管理 ====================
+// ==================== 后台管理（商品库存管理 + 新产品上架） ====================
 function getAdminToken() { return sessionStorage.getItem('admin_token'); }
 function setAdminToken(token) { sessionStorage.setItem('admin_token', token); }
 
@@ -365,6 +396,81 @@ async function fetchWithAdminToken(url, options = {}) {
     const headers = { ...options.headers, 'X-Admin-Token': token };
     return fetch(url, { ...options, headers });
 }
+
+async function loadProductManagement() {
+    try {
+        const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products`);
+        const products = await res.json();
+        const tbody = document.querySelector('#productTable tbody');
+        if (!tbody) return;
+        tbody.innerHTML = products.map(p => `
+            <tr>
+                <td>${escapeHtml(p.name)}</td>
+                <td>${p.price}</td>
+                <td id="stock-${p.id}">${p.stock}</td>
+                <td>
+                    <button class="small" onclick="adjustStock('${p.id}', 1)">+1</button>
+                    <button class="small" onclick="adjustStock('${p.id}', -1)">-1</button>
+                    <button class="small" onclick="adjustStock('${p.id}', 10)">+10</button>
+                    <button class="small" onclick="adjustStock('${p.id}', -10)">-10</button>
+                </td>
+            </tr>
+        `).join('');
+    } catch(e) { console.error(e); }
+}
+
+window.adjustStock = async (productId, delta) => {
+    try {
+        const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products/${productId}/stock`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ delta })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            document.getElementById(`stock-${productId}`).innerText = data.stock;
+            loadProducts();
+        } else {
+            const err = await res.json();
+            alert('调整失败：' + (err.detail || '未知错误'));
+        }
+    } catch(e) { alert('网络错误'); }
+};
+
+window.addNewProduct = async () => {
+    const name = document.getElementById('newProdName').value.trim();
+    const description = document.getElementById('newProdDesc').value.trim();
+    const price = document.getElementById('newProdPrice').value.trim();
+    const priceValue = parseInt(document.getElementById('newProdPriceValue').value);
+    const stock = parseInt(document.getElementById('newProdStock').value);
+    let imageUrl = document.getElementById('newProdImage').value.trim();
+    if (!name || !description || !price || isNaN(priceValue) || isNaN(stock)) {
+        alert('请完整填写商品信息（名称、描述、显示价格、价格(分)、库存）');
+        return;
+    }
+    if (!imageUrl) imageUrl = '/static/drone.jpg';
+    try {
+        const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description, price, price_value: priceValue, stock, image_url: imageUrl })
+        });
+        if (res.ok) {
+            alert('新产品上架成功');
+            document.getElementById('newProdName').value = '';
+            document.getElementById('newProdDesc').value = '';
+            document.getElementById('newProdPrice').value = '';
+            document.getElementById('newProdPriceValue').value = '';
+            document.getElementById('newProdStock').value = '';
+            document.getElementById('newProdImage').value = '';
+            loadProductManagement();
+            loadProducts();
+        } else {
+            const err = await res.json();
+            alert('上架失败：' + (err.detail || '未知错误'));
+        }
+    } catch(e) { alert('网络错误'); }
+};
 
 async function loadAdminData() {
     try {
@@ -393,6 +499,7 @@ async function loadAdminData() {
             </tr>
         `).join('');
     } catch(e) { alert("加载FAQ失败"); }
+    await loadProductManagement();
 }
 
 window.deleteFaq = async function(question) {
@@ -471,25 +578,7 @@ function switchTab(tabId) {
     });
 }
 
-// ==================== 历史记录模态框 ====================
-async function showHistoryModal() {
-    const bodyDiv = document.getElementById('historyModalBody');
-    bodyDiv.innerHTML = '加载中...';
-    historyModal.style.display = 'flex';
-    try {
-        const res = await fetch(`${API_BASE}/api/history?user_id=${encodeURIComponent(currentUserId || 'guest')}`);
-        const history = await res.json();
-        if (!history.length) { bodyDiv.innerHTML = '<p>暂无历史记录</p>'; return; }
-        let html = '';
-        for (let item of history) {
-            html += `<div class="history-item"><div class="history-time">${formatLocalTime(item.timestamp)}</div><div class="history-q"><strong>问：</strong>${escapeHtml(item.user_message)}</div><div class="history-a"><strong>答：</strong>${escapeHtml(item.ai_reply)}</div></div>`;
-        }
-        bodyDiv.innerHTML = html;
-    } catch(e) { bodyDiv.innerHTML = '<p>加载失败</p>'; }
-}
-function closeHistoryModal() { historyModal.style.display = 'none'; }
-function showOrderModal() { orderModal.style.display = 'flex'; document.getElementById('orderIdInput').value = ''; document.getElementById('orderResult').innerHTML = ''; }
-function closeOrderModal() { orderModal.style.display = 'none'; }
+// ==================== 订单查询 ====================
 async function queryOrder() {
     const orderId = document.getElementById('orderIdInput').value.trim();
     if (!orderId) { document.getElementById('orderResult').innerHTML = '<span style="color:red;">请输入订单号</span>'; return; }
@@ -542,6 +631,7 @@ function init() {
     });
     safeAddEventListener('guestLoginBtn', 'click', guestLogin);
     safeAddEventListener('addFaqBtn', 'click', window.addFaq);
+    safeAddEventListener('addProductBtn', 'click', window.addNewProduct);
 
     document.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', () => switchTab(tab.getAttribute('data-tab')));

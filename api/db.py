@@ -1,7 +1,10 @@
 from sqlalchemy import Column, String, Text, DateTime, Integer
 from sqlalchemy.sql import func
 from .database import Base
-from datetime import datetime
+from datetime import datetime, timezone
+
+def utc_now():
+    return datetime.now(timezone.utc)
 
 class Conversation(Base):
     __tablename__ = "conversations"
@@ -11,7 +14,8 @@ class Conversation(Base):
     session_id = Column(String, index=True)
     user_message = Column(Text)
     ai_reply = Column(Text)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    # 使用数据库服务器的 now() 函数，自动生成 UTC 时间
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 class FAQ(Base):
     __tablename__ = "faqs"
@@ -25,7 +29,7 @@ class User(Base):
     username = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     is_guest = Column(String, default="0")   # "1" 表示游客
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 class Product(Base):
     __tablename__ = "products"
@@ -47,4 +51,4 @@ class Order(Base):
     total_price = Column(String)       # 显示用
     total_value = Column(Integer)      # 分
     status = Column(String, default="active")  # active / cancelled
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

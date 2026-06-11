@@ -3,13 +3,15 @@ import uuid
 import time
 import requests
 from collections import defaultdict
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime, timezone
 from .database import get_db
-from .db import Conversation, FAQ
+from .db import Conversation, FAQ, User
+import jwt
+from .auth import SECRET_KEY, ALGORITHM
 
 router = APIRouter()
 
@@ -48,16 +50,31 @@ def find_faq_match(db: Session, user_message: str) -> str | None:
             return faq.answer
     return None
 
+# 从token获取当前用户（用于历史记录）
+def get_current_user_from_token(authorization: str = Header(None), db: Session = Depends(get_db)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="缺少认证")
+    token = authorization.split(" ")[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="用户不存在")
+        return user
+    except:
+        raise HTTPException(status_code=401, detail="无效token")
+
 @router.post("/chat")
 def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
-    # ---------- 1. 限流检查（内存实现，3秒间隔） ----------
+    # 限流检查（3秒）
     key = request.user_id if request.user_id != 'guest' else request.session_id
     now = time.time()
     if key in _user_last_time and now - _user_last_time[key] < 3:
         raise HTTPException(status_code=429, detail="亲，您发言太频繁啦，请休息3秒后再试～")
     _user_last_time[key] = now
 
-    # ---------- 2. FAQ 匹配 ----------
+    # FAQ 精确匹配
     faq_answer = find_faq_match(db, request.message)
     if faq_answer:
         ai_message = faq_answer
@@ -72,13 +89,13 @@ def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
         db.commit()
         return {"response": ai_message}
 
-    # ---------- 3. 构建对话历史 ----------
+    # 构建对话历史
     history_messages = get_conversation_history(db, request.user_id, request.session_id, limit=5)
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.extend(history_messages)
     messages.append({"role": "user", "content": request.message})
 
-    # ---------- 4. 调用 LLM 或 fallback ----------
+    # 调用 DeepSeek 或 fallback
     if not DEEPSEEK_API_KEY:
         ai_message = fallback_reply(request.message)
     else:
@@ -100,7 +117,7 @@ def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
             print(f"DeepSeek API 调用失败: {e}")
             ai_message = fallback_reply(request.message)
 
-    # ---------- 5. 保存对话 ----------
+    # 保存对话
     conv = Conversation(
         id=str(uuid.uuid4()),
         user_id=request.user_id,
@@ -127,8 +144,8 @@ def fallback_reply(message: str) -> str:
         return f"您好，我是X-Drone售后助手。您的问题是：“{message}”。我会尽力为您解答。如需更多帮助，请拨打客服热线。"
 
 @router.get("/history")
-def get_user_history(user_id: str, db: Session = Depends(get_db)):
-    convs = db.query(Conversation).filter(Conversation.user_id == user_id).order_by(Conversation.timestamp.desc()).limit(100).all()
+def get_user_history(user: User = Depends(get_current_user_from_token), db: Session = Depends(get_db)):
+    convs = db.query(Conversation).filter(Conversation.user_id == user.id).order_by(Conversation.timestamp.desc()).limit(100).all()
     return [{
         "id": c.id,
         "timestamp": c.timestamp.isoformat(),
