@@ -73,7 +73,7 @@
                         <th>商品名称</th>
                         <th>价格</th>
                         <th>当前库存</th>
-                        <th>调整库存</th>
+                        <th>操作</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -123,6 +123,24 @@
 
     <div id="historyModal" class="modal"><div class="modal-content"><div class="modal-header"><h3>历史对话</h3><button id="closeHistoryBtn">&times;</button></div><div class="modal-body" id="historyModalBody"></div></div></div>
     <div id="orderModal" class="modal"><div class="modal-content"><div class="modal-header"><h3>订单查询</h3><button id="closeOrderBtn">&times;</button></div><div class="modal-body"><input type="text" id="orderIdInput" placeholder="订单号 XD..."><button id="queryOrderBtn">查询</button><div id="orderResult"></div></div></div></div>
+
+    <!-- 管理员密码验证模态框（新增） -->
+    <div id="adminPasswordModal" class="modal">
+        <div class="modal-content" style="max-width: 360px;">
+            <div class="modal-header">
+                <h3>管理员验证</h3>
+                <button id="closeAdminPwdBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>请输入管理员密码：</p>
+                <input type="password" id="adminPasswordInput" placeholder="密码" style="width:100%; padding:10px; margin:10px 0;">
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button id="cancelAdminBtn">取消</button>
+                    <button id="confirmAdminBtn" style="background:#1e3c72; color:white;">确认</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 <script src="/js/script.js"></script>
 </body>

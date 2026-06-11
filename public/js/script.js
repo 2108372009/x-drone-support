@@ -315,8 +315,15 @@ async function loadOrders() {
         const container = document.getElementById('ordersList');
         if (!orders.length) { container.innerHTML = '<p>暂无订单</p>'; return; }
         container.innerHTML = orders.map(o => {
-            const dateObj = safeParseDate(o.created_at);
-            const dateStr = dateObj ? dateObj.toLocaleString() : '时间未知';
+            // 修复Invalid Date问题
+            let dateObj = null;
+            let dateStr = '时间未知';
+            if (o.created_at) {
+                dateObj = new Date(o.created_at);
+                if (!isNaN(dateObj.getTime())) {
+                    dateStr = dateObj.toLocaleString();
+                }
+            }
             return `
                 <div class="order-item">
                     <div><strong>${escapeHtml(o.product_name)}</strong> × ${o.quantity}</div>
@@ -429,25 +436,71 @@ async function guestLogin() {
         isGuest = true;
         localStorage.setItem('is_guest', 'true');
         closeLoginModal();
-        // 游客不能加载订单和商品购买按钮，但可以浏览商城（购买时会拦截）
         loadProducts();
     } catch(e) { alert('游客登录失败'); }
 }
 
-// ==================== 后台管理 ====================
+// ==================== 后台管理（增强版） ====================
 function getAdminToken() { return sessionStorage.getItem('admin_token'); }
 function setAdminToken(token) { sessionStorage.setItem('admin_token', token); }
+
+// 使用模态框代替原生 prompt
+let adminPasswordResolver = null;
+let adminPasswordRejecter = null;
+
+function showAdminPasswordModal() {
+    return new Promise((resolve, reject) => {
+        adminPasswordResolver = resolve;
+        adminPasswordRejecter = reject;
+        const modal = document.getElementById('adminPasswordModal');
+        const input = document.getElementById('adminPasswordInput');
+        const confirmBtn = document.getElementById('confirmAdminBtn');
+        const cancelBtn = document.getElementById('cancelAdminBtn');
+        const closeBtn = document.getElementById('closeAdminPwdBtn');
+
+        input.value = '';
+        modal.style.display = 'flex';
+
+        const cleanup = () => {
+            modal.style.display = 'none';
+            confirmBtn.removeEventListener('click', onClickConfirm);
+            cancelBtn.removeEventListener('click', onClickCancel);
+            closeBtn.removeEventListener('click', onClickCancel);
+            adminPasswordResolver = null;
+            adminPasswordRejecter = null;
+        };
+
+        const onClickConfirm = () => {
+            const pwd = input.value;
+            if (pwd === "1234") {
+                cleanup();
+                resolve(pwd);
+            } else {
+                alert("密码错误，请重试");
+                input.value = '';
+                input.focus();
+            }
+        };
+
+        const onClickCancel = () => {
+            cleanup();
+            reject(new Error("用户取消授权"));
+        };
+
+        confirmBtn.addEventListener('click', onClickConfirm);
+        cancelBtn.addEventListener('click', onClickCancel);
+        closeBtn.addEventListener('click', onClickCancel);
+    });
+}
 
 async function fetchWithAdminToken(url, options = {}) {
     let token = getAdminToken();
     if (!token) {
-        const pwd = prompt("请输入管理员密码：");
-        if (pwd === "1234") {
-            setAdminToken(pwd);
-            token = pwd;
-        } else {
-            alert("权限不够，拒绝访问");
-            throw new Error("Unauthorized");
+        try {
+            token = await showAdminPasswordModal();
+            setAdminToken(token);
+        } catch (e) {
+            throw new Error("需要管理员权限才能继续");
         }
     }
     const headers = { ...options.headers, 'X-Admin-Token': token };
@@ -483,6 +536,7 @@ async function loadProductManagement() {
                     <button class="small" onclick="adjustStock('${p.id}', -1)">-1</button>
                     <button class="small" onclick="adjustStock('${p.id}', 10)">+10</button>
                     <button class="small" onclick="adjustStock('${p.id}', -10)">-10</button>
+                    <button class="small" style="background:#dc3545;" onclick="deleteProduct('${p.id}')">下架</button>
                 </td>
             </tr>
         `).join('');
@@ -509,6 +563,27 @@ window.adjustStock = async (productId, delta) => {
             alert('调整失败：' + (err.detail || '未知错误'));
         }
     } catch(e) { alert('网络错误'); }
+};
+
+// 新增下架商品函数
+window.deleteProduct = async (productId) => {
+    if (!confirm("确定要下架该商品吗？删除后不可恢复，已购买订单不受影响。")) return;
+    try {
+        const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products/${productId}`, {
+            method: 'DELETE'
+        });
+        if (res.ok) {
+            alert("商品已下架");
+            loadProductManagement();
+            loadProducts();
+        } else {
+            const err = await res.json();
+            alert("下架失败：" + (err.detail || "未知错误"));
+        }
+    } catch(e) {
+        console.error(e);
+        alert("网络错误或权限验证失败");
+    }
 };
 
 window.addNewProduct = async () => {
@@ -633,18 +708,15 @@ function switchTab(tabId) {
         loadProducts();
     } else if (tabId === 'orders') {
         if (!requireLogin()) {
-            // 未登录时切换到聊天标签
             switchTab('chat');
             return;
         }
         ordersView.classList.remove('hidden');
         loadOrders();
     } else if (tabId === 'admin') {
-        // 显示后台管理视图（先显示加载提示）
         adminView.classList.remove('hidden');
         const productTbody = document.querySelector('#productTable tbody');
         if (productTbody) productTbody.innerHTML = '<tr><td colspan="4">加载中...</td></tr>';
-        // 异步加载数据，不切换标签
         loadAdminData().catch(err => {
             console.error('加载后台数据失败', err);
             alert('加载后台数据失败，请检查管理员密码或网络');
@@ -702,7 +774,6 @@ function init() {
     safeAddEventListener('guestLoginBtn', 'click', guestLogin);
     safeAddEventListener('addFaqBtn', 'click', window.addFaq);
 
-    // 绑定上架新产品按钮
     const addProductBtn = document.getElementById('addProductBtn');
     if (addProductBtn) {
         addProductBtn.addEventListener('click', () => {

@@ -108,3 +108,13 @@ async def update_stock(product_id: str, update: StockUpdate, _: bool = Depends(v
     product.stock = new_stock
     db.commit()
     return {"id": product_id, "stock": product.stock}
+
+# 新增：下架商品（物理删除）
+@router.delete("/admin/products/{product_id}")
+async def delete_product(product_id: str, _: bool = Depends(verify_admin), db: Session = Depends(get_db)):
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="商品不存在")
+    db.delete(product)
+    db.commit()
+    return {"message": "商品已下架"}

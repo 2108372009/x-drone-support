@@ -253,3 +253,27 @@ button.delete-btn { background: #dc3545; border: none; color: white; padding: 4p
 .order-item button { background: #dc2626; border: none; padding: 6px 14px; border-radius: 30px; color: white; cursor: pointer; }
 .modal-body input { width: 100%; margin-bottom: 12px; padding: 10px; border: 1px solid #cbd5e1; border-radius: 12px; }
 .modal-body button { background: #1e3c72; color: white; border: none; padding: 8px 16px; border-radius: 30px; margin-right: 8px; cursor: pointer; }
+/* 移动端模态框适配 */
+@media (max-width: 640px) {
+    .modal-content {
+        width: 90%;
+        margin: 10% auto;
+    }
+    #adminPasswordModal .modal-content {
+        width: 90%;
+    }
+    #adminPasswordInput {
+        font-size: 16px; /* 防止iOS缩放 */
+    }
+    /* 后台表格横向滚动优化 */
+    #adminView {
+        overflow-x: auto;
+    }
+    .product-grid {
+        justify-content: center;
+    }
+    .product-card {
+        width: 100%;
+        max-width: 280px;
+    }
+}
