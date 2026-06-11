@@ -4,6 +4,7 @@ const API_BASE = '';
 let currentToken = localStorage.getItem('auth_token');
 let currentUserId = localStorage.getItem('user_id');
 let currentUsername = localStorage.getItem('username');
+let isGuest = localStorage.getItem('is_guest') === 'true';   // 游客标识
 
 let sessionId = localStorage.getItem('sessionId');
 if (!sessionId) {
@@ -67,6 +68,16 @@ function safeParseDate(dateStr) {
     return null;
 }
 
+// 游客限制：如果未登录或为游客，弹出提示并返回 false
+function requireLogin() {
+    if (!currentToken || isGuest) {
+        alert('请先注册/登录账号再进行此操作');
+        showLoginModal();
+        return false;
+    }
+    return true;
+}
+
 function updateUserUI() {
     if (currentToken && currentUserId) {
         userNameSpan.innerText = currentUsername || '用户';
@@ -83,9 +94,11 @@ function storeAuth(token, userId, username) {
     currentToken = token;
     currentUserId = userId;
     currentUsername = username;
+    isGuest = false;
     localStorage.setItem('auth_token', token);
     localStorage.setItem('user_id', userId);
     localStorage.setItem('username', username);
+    localStorage.setItem('is_guest', 'false');
     updateUserUI();
 }
 
@@ -93,9 +106,11 @@ function clearAuth() {
     currentToken = null;
     currentUserId = null;
     currentUsername = null;
+    isGuest = false;
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_id');
     localStorage.removeItem('username');
+    localStorage.removeItem('is_guest');
     updateUserUI();
 }
 
@@ -189,8 +204,8 @@ function sendWelcomeMessage() {
 
 // ==================== 历史对话 ====================
 async function showHistoryModal() {
-    if (!currentToken) {
-        alert('请先登录或注册查看您的历史对话');
+    if (!currentToken || isGuest) {
+        alert('请先注册/登录查看您的历史对话');
         showLoginModal();
         return;
     }
@@ -258,20 +273,17 @@ async function loadProducts() {
 
 async function buyProduct(productId) {
     console.log('buyProduct 被调用，商品ID：', productId);
-    if (!currentToken) { alert('请先登录或注册'); showLoginModal(); return; }
-    if (localStorage.getItem('is_guest') === 'true') {
-        alert('亲，游客模式不能购物，请先注册/登录账号再进行购买哦～');
+    // 游客限制
+    if (!currentToken || isGuest) {
+        alert('请先注册/登录再进行购买');
+        showLoginModal();
         return;
     }
     const qtyInput = document.getElementById(`qty-${productId}`);
     if (!qtyInput) { console.error('找不到数量输入框'); return; }
     const quantity = parseInt(qtyInput.value) || 1;
     const confirmMsg = `确认购买此商品吗？\n数量：${quantity}`;
-    console.log('准备弹出确认框');
-    if (!confirm(confirmMsg)) {
-        console.log('用户取消购买');
-        return;
-    }
+    if (!confirm(confirmMsg)) return;
     try {
         const res = await fetch(`${API_BASE}/api/shop/purchase`, {
             method: 'POST',
@@ -292,7 +304,7 @@ async function buyProduct(productId) {
 // ==================== 订单模块 ====================
 async function loadOrders() {
     console.log('加载订单');
-    if (!currentToken) {
+    if (!currentToken || isGuest) {
         document.getElementById('ordersList').innerHTML = '<p>请先登录查看订单</p>';
         return;
     }
@@ -318,6 +330,7 @@ async function loadOrders() {
 }
 
 window.cancelOrder = async (orderId) => {
+    if (!requireLogin()) return;
     if (!confirm('确定要取消此订单吗？库存将恢复')) return;
     try {
         const res = await fetch(`${API_BASE}/api/shop/orders/${orderId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${currentToken}` } });
@@ -352,6 +365,7 @@ async function handleLogin() {
             const data = await res.json();
             storeAuth(data.token, data.user_id, data.username);
             localStorage.removeItem('is_guest');
+            isGuest = false;
             closeLoginModal();
             loadProducts();
             if (document.querySelector('.tab.active')?.getAttribute('data-tab') === 'orders') loadOrders();
@@ -393,6 +407,7 @@ async function handleRegister() {
             const data = await res.json();
             storeAuth(data.token, data.user_id, data.username);
             localStorage.removeItem('is_guest');
+            isGuest = false;
             closeLoginModal();
             loadProducts();
             if (document.querySelector('.tab.active')?.getAttribute('data-tab') === 'orders') loadOrders();
@@ -411,10 +426,11 @@ async function guestLogin() {
         const res = await fetch(`${API_BASE}/api/auth/guest`, { method: 'POST' });
         const data = await res.json();
         storeAuth(data.token, data.user_id, data.username);
+        isGuest = true;
         localStorage.setItem('is_guest', 'true');
         closeLoginModal();
+        // 游客不能加载订单和商品购买按钮，但可以浏览商城（购买时会拦截）
         loadProducts();
-        if (document.querySelector('.tab.active')?.getAttribute('data-tab') === 'orders') loadOrders();
     } catch(e) { alert('游客登录失败'); }
 }
 
@@ -586,7 +602,7 @@ window.addFaq = async function() {
     } catch(e) { alert("添加失败"); }
 };
 
-// ==================== 页面切换 ====================
+// ==================== 页面切换（修复卡顿和回退） ====================
 function switchTab(tabId) {
     const chatMain = document.getElementById('chatMain');
     const shopView = document.getElementById('shopView');
@@ -594,32 +610,13 @@ function switchTab(tabId) {
     const adminView = document.getElementById('adminView');
     const tabs = document.querySelectorAll('.tab');
 
+    // 先隐藏所有视图
     chatMain.classList.add('hidden');
     shopView.classList.add('hidden');
     ordersView.classList.add('hidden');
     adminView.classList.add('hidden');
 
-    if (tabId === 'chat') {
-        chatMain.classList.remove('hidden');
-    } else if (tabId === 'shop') {
-        shopView.classList.remove('hidden');
-        loadProducts();
-    } else if (tabId === 'orders') {
-        ordersView.classList.remove('hidden');
-        loadOrders();
-    } else if (tabId === 'admin') {
-        (async () => {
-            try {
-                await loadAdminData();
-                adminView.classList.remove('hidden');
-            } catch(e) {
-                console.error(e);
-                switchTab('chat');
-            }
-        })();
-        return;
-    }
-
+    // 更新标签激活样式
     tabs.forEach(tab => {
         if (tab.getAttribute('data-tab') === tabId) {
             tab.classList.add('active');
@@ -627,6 +624,32 @@ function switchTab(tabId) {
             tab.classList.remove('active');
         }
     });
+
+    // 根据选中的标签显示对应视图并加载数据
+    if (tabId === 'chat') {
+        chatMain.classList.remove('hidden');
+    } else if (tabId === 'shop') {
+        shopView.classList.remove('hidden');
+        loadProducts();
+    } else if (tabId === 'orders') {
+        if (!requireLogin()) {
+            // 未登录时切换到聊天标签
+            switchTab('chat');
+            return;
+        }
+        ordersView.classList.remove('hidden');
+        loadOrders();
+    } else if (tabId === 'admin') {
+        // 显示后台管理视图（先显示加载提示）
+        adminView.classList.remove('hidden');
+        const productTbody = document.querySelector('#productTable tbody');
+        if (productTbody) productTbody.innerHTML = '<tr><td colspan="4">加载中...</td></tr>';
+        // 异步加载数据，不切换标签
+        loadAdminData().catch(err => {
+            console.error('加载后台数据失败', err);
+            alert('加载后台数据失败，请检查管理员密码或网络');
+        });
+    }
 }
 
 // ==================== 订单查询 ====================
@@ -679,7 +702,7 @@ function init() {
     safeAddEventListener('guestLoginBtn', 'click', guestLogin);
     safeAddEventListener('addFaqBtn', 'click', window.addFaq);
 
-    // 修复上架新产品按钮事件绑定
+    // 绑定上架新产品按钮
     const addProductBtn = document.getElementById('addProductBtn');
     if (addProductBtn) {
         addProductBtn.addEventListener('click', () => {
