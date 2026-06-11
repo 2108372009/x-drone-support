@@ -240,21 +240,18 @@ async function loadProducts() {
         const products = await res.json();
         const container = document.getElementById('productList');
         if (!container) return;
-        container.innerHTML = products.map(p => {
-            const stockText = p.stock === 0 ? '已售罄' : `库存: ${p.stock}`;
-            const disabledAttr = p.stock === 0 ? 'disabled' : '';
-            return `
+        container.innerHTML = products.map(p => `
             <div class="product-card">
                 <h4>${escapeHtml(p.name)}</h4>
                 <p>${escapeHtml(p.description)}</p>
                 <div class="price">${p.price}</div>
-                <div class="stock">${stockText}</div>
+                <div class="stock">库存: ${p.stock}</div>
                 <div class="buy-action">
-                    <input type="number" min="1" max="${p.stock}" value="1" id="qty-${p.id}" ${disabledAttr}>
-                    <button class="buy-btn" data-id="${p.id}" ${disabledAttr}>购买</button>
+                    <input type="number" min="1" max="${p.stock}" value="1" id="qty-${p.id}" ${p.stock===0?'disabled':''}>
+                    <button class="buy-btn" data-id="${p.id}" ${p.stock===0?'disabled':''}>购买</button>
                 </div>
             </div>
-        `}).join('');
+        `).join('');
         document.querySelectorAll('.buy-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const productId = btn.getAttribute('data-id');
@@ -435,13 +432,11 @@ async function loadProductManagement() {
             tbody.innerHTML = '<tr><td colspan="5">暂无商品，请点击“上架新产品”添加</td></tr>';
             return;
         }
-        tbody.innerHTML = products.map(p => {
-            const stockDisplay = p.stock === 0 ? '已售罄' : p.stock;
-            return `
+        tbody.innerHTML = products.map(p => `
             <tr>
                 <td>${escapeHtml(p.name)}</td>
                 <td>${p.price}</td>
-                <td id="stock-${p.id}">${stockDisplay}</td>
+                <td id="stock-${p.id}">${p.stock}</td>
                 <td>
                     <button class="small" onclick="adjustStock('${p.id}', 1)">+1</button>
                     <button class="small" onclick="adjustStock('${p.id}', -1)">-1</button>
@@ -450,7 +445,7 @@ async function loadProductManagement() {
                     <button class="small" style="background:#dc3545; margin-left:8px;" onclick="deleteProduct('${p.id}')">下架</button>
                   </td>
             </tr>
-        `}).join('');
+        `).join('');
     } catch(e) {
         console.error(e);
         alert('加载商品列表失败，请检查管理员权限');
@@ -466,11 +461,9 @@ window.adjustStock = async (productId, delta) => {
         });
         if (res.ok) {
             const data = await res.json();
-            // 更新表格中的库存显示
             const stockCell = document.getElementById(`stock-${productId}`);
             if (stockCell) {
-                const newStock = data.stock;
-                stockCell.innerText = newStock === 0 ? '已售罄' : newStock;
+                stockCell.innerText = data.stock;
             }
             loadProducts(); // 刷新前台商城
         } else {
@@ -483,7 +476,7 @@ window.adjustStock = async (productId, delta) => {
 window.addNewProduct = async () => {
     const name = document.getElementById('newProdName').value.trim();
     const description = document.getElementById('newProdDesc').value.trim();
-    const priceDisplay = document.getElementById('newProdPrice').value.trim();  // 如 "¥3,499"
+    const priceDisplay = document.getElementById('newProdPrice').value.trim();
     const priceYuan = parseFloat(document.getElementById('newProdPriceYuan').value);
     const stock = parseInt(document.getElementById('newProdStock').value);
     let imageUrl = document.getElementById('newProdImage').value.trim();
@@ -496,21 +489,14 @@ window.addNewProduct = async () => {
         alert('价格必须大于0');
         return;
     }
-    const priceValue = Math.round(priceYuan * 100); // 转换为分
+    const priceValue = Math.round(priceYuan * 100);
     if (!imageUrl) imageUrl = '/static/drone.jpg';
 
     try {
         const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name,
-                description,
-                price: priceDisplay,
-                price_value: priceValue,
-                stock,
-                image_url: imageUrl
-            })
+            body: JSON.stringify({ name, description, price: priceDisplay, price_value: priceValue, stock, image_url: imageUrl })
         });
         if (res.ok) {
             alert('新产品上架成功');
@@ -532,9 +518,7 @@ window.addNewProduct = async () => {
 window.deleteProduct = async (productId) => {
     if (!confirm('确定要下架并删除此商品吗？删除后不可恢复。')) return;
     try {
-        const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products/${productId}`, {
-            method: 'DELETE'
-        });
+        const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products/${productId}`, { method: 'DELETE' });
         if (res.ok) {
             alert('商品已下架删除');
             loadProductManagement();
