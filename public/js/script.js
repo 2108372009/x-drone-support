@@ -16,7 +16,7 @@ const chatBox = document.getElementById('chatBox');
 const userInput = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
 const newSessionBtn = document.getElementById('newSessionBtn');
-const historyBtn = document.getElementById('historyBtn');
+const historyBtn = document.getElementById('historyBtn'); // 新的历史按钮
 const loginBtn = document.getElementById('loginBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 const userNameSpan = document.getElementById('userNameDisplay');
@@ -191,7 +191,16 @@ async function showHistoryModal() {
         const res = await fetch(`${API_BASE}/api/history`, {
             headers: { 'Authorization': `Bearer ${currentToken}` }
         });
-        if (!res.ok) throw new Error('认证失败');
+        if (!res.ok) {
+            if (res.status === 401) {
+                alert('登录已过期，请重新登录');
+                clearAuth();
+                showLoginModal();
+                historyModal.style.display = 'none';
+                return;
+            }
+            throw new Error('请求失败');
+        }
         const history = await res.json();
         if (!history.length) { bodyDiv.innerHTML = '<p>暂无历史记录</p>'; return; }
         let html = '';
@@ -200,7 +209,8 @@ async function showHistoryModal() {
         }
         bodyDiv.innerHTML = html;
     } catch(e) {
-        bodyDiv.innerHTML = '<p>加载失败，请确保已登录</p>';
+        console.error(e);
+        bodyDiv.innerHTML = '<p>加载失败，请稍后重试</p>';
     }
 }
 function closeHistoryModal() { historyModal.style.display = 'none'; }
@@ -222,20 +232,28 @@ async function loadProducts() {
                 <div class="stock">库存: ${p.stock}</div>
                 <div class="buy-action">
                     <input type="number" min="1" max="${p.stock}" value="1" id="qty-${p.id}" ${p.stock===0?'disabled':''}>
-                    <button onclick="buyProduct('${p.id}')" ${p.stock===0?'disabled':''}>购买</button>
+                    <button class="buy-btn" data-id="${p.id}" ${p.stock===0?'disabled':''}>购买</button>
                 </div>
             </div>
         `).join('');
+        // 绑定购买按钮事件（避免全局onclick污染）
+        document.querySelectorAll('.buy-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const productId = btn.getAttribute('data-id');
+                buyProduct(productId);
+            });
+        });
     } catch(e) { console.error(e); }
 }
 
-window.buyProduct = async (productId) => {
+async function buyProduct(productId) {
     if (!currentToken) { alert('请先登录或注册'); showLoginModal(); return; }
     if (localStorage.getItem('is_guest') === 'true') {
         alert('亲，游客模式不能购物，请先注册/登录账号再进行购买哦～');
         return;
     }
     const qtyInput = document.getElementById(`qty-${productId}`);
+    if (!qtyInput) return;
     const quantity = parseInt(qtyInput.value) || 1;
     // 购买确认弹窗
     const confirmMsg = `确认购买此商品吗？\n数量：${quantity}`;
@@ -255,13 +273,24 @@ window.buyProduct = async (productId) => {
             alert('购买失败：' + (err.detail || '未知错误'));
         }
     } catch(e) { alert('网络错误'); }
-};
+}
 
 // ==================== 订单模块 ====================
 async function loadOrders() {
-    if (!currentToken) { document.getElementById('ordersList').innerHTML = '<p>请先登录查看订单</p>'; return; }
+    if (!currentToken) {
+        document.getElementById('ordersList').innerHTML = '<p>请先登录查看订单</p>';
+        return;
+    }
     try {
         const res = await fetch(`${API_BASE}/api/shop/orders`, { headers: { 'Authorization': `Bearer ${currentToken}` } });
+        if (!res.ok) {
+            if (res.status === 401) {
+                alert('登录已过期，请重新登录');
+                clearAuth();
+                return;
+            }
+            throw new Error('加载失败');
+        }
         const orders = await res.json();
         const container = document.getElementById('ordersList');
         if (!orders.length) { container.innerHTML = '<p>暂无订单</p>'; return; }
@@ -270,10 +299,10 @@ async function loadOrders() {
                 <div><strong>${escapeHtml(o.product_name)}</strong> × ${o.quantity}</div>
                 <div>总价 ${o.total_price}</div>
                 <div>${new Date(o.created_at).toLocaleString()}</div>
-                <button onclick="cancelOrder('${o.id}')">删除订单</button>
+                <button onclick="cancelOrder('${o.id}')">取消订单</button>
             </div>
         `).join('');
-    } catch(e) { console.error(e); }
+    } catch(e) { console.error(e); document.getElementById('ordersList').innerHTML = '<p>加载失败，请重试</p>'; }
 }
 
 window.cancelOrder = async (orderId) => {
@@ -389,7 +418,7 @@ async function fetchWithAdminToken(url, options = {}) {
             setAdminToken(pwd);
             token = pwd;
         } else {
-            alert("权限不够拒绝访问");
+            alert("权限不够，拒绝访问");
             throw new Error("Unauthorized");
         }
     }
@@ -416,7 +445,7 @@ async function loadProductManagement() {
                 </td>
             </tr>
         `).join('');
-    } catch(e) { console.error(e); }
+    } catch(e) { console.error(e); alert("加载商品列表失败，请检查管理员权限"); }
 }
 
 window.adjustStock = async (productId, delta) => {
@@ -429,7 +458,7 @@ window.adjustStock = async (productId, delta) => {
         if (res.ok) {
             const data = await res.json();
             document.getElementById(`stock-${productId}`).innerText = data.stock;
-            loadProducts();
+            loadProducts(); // 刷新前台商品列表
         } else {
             const err = await res.json();
             alert('调整失败：' + (err.detail || '未知错误'));
@@ -486,7 +515,7 @@ async function loadAdminData() {
                 <td>${escapeHtml(l.ai_reply)}</td>
             </tr>
         `).join('');
-    } catch(e) { console.error(e); }
+    } catch(e) { console.error(e); alert("加载对话记录失败"); }
     try {
         const faqsResp = await fetchWithAdminToken(`${API_BASE}/api/admin/faqs`);
         const faqs = await faqsResp.json();
@@ -547,26 +576,19 @@ function switchTab(tabId) {
         ordersView.classList.remove('hidden');
         loadOrders();
     } else if (tabId === 'admin') {
-        let token = getAdminToken();
-        if (!token) {
-            const pwd = prompt("请输入管理员密码：");
-            if (pwd === "1234") {
-                setAdminToken(pwd);
-                token = pwd;
-            } else {
-                alert("权限不够拒绝访问");
-                const activeTab = document.querySelector('.tab.active');
-                if (activeTab) {
-                    const currentTabId = activeTab.getAttribute('data-tab');
-                    if (currentTabId === 'chat') chatMain.classList.remove('hidden');
-                    else if (currentTabId === 'shop') { shopView.classList.remove('hidden'); loadProducts(); }
-                    else if (currentTabId === 'orders') { ordersView.classList.remove('hidden'); loadOrders(); }
-                }
-                return;
+        // 确保管理员验证
+        (async () => {
+            try {
+                // 先尝试加载数据，内部会触发密码输入
+                await loadAdminData();
+                adminView.classList.remove('hidden');
+            } catch(e) {
+                console.error(e);
+                // 如果失败，切换到聊天标签
+                switchTab('chat');
             }
-        }
-        adminView.classList.remove('hidden');
-        loadAdminData();
+        })();
+        return; // 异步操作，先返回
     }
 
     tabs.forEach(tab => {
