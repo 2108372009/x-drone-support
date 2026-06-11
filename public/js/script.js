@@ -16,7 +16,7 @@ const chatBox = document.getElementById('chatBox');
 const userInput = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
 const newSessionBtn = document.getElementById('newSessionBtn');
-const historyBtn = document.getElementById('historyBtn'); // 新的历史按钮
+const historyBtn = document.getElementById('historyBtn');
 const loginBtn = document.getElementById('loginBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 const userNameSpan = document.getElementById('userNameDisplay');
@@ -236,7 +236,6 @@ async function loadProducts() {
                 </div>
             </div>
         `).join('');
-        // 绑定购买按钮事件（避免全局onclick污染）
         document.querySelectorAll('.buy-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const productId = btn.getAttribute('data-id');
@@ -255,7 +254,6 @@ async function buyProduct(productId) {
     const qtyInput = document.getElementById(`qty-${productId}`);
     if (!qtyInput) return;
     const quantity = parseInt(qtyInput.value) || 1;
-    // 购买确认弹窗
     const confirmMsg = `确认购买此商品吗？\n数量：${quantity}`;
     if (!confirm(confirmMsg)) return;
     try {
@@ -298,7 +296,7 @@ async function loadOrders() {
             <div class="order-item">
                 <div><strong>${escapeHtml(o.product_name)}</strong> × ${o.quantity}</div>
                 <div>总价 ${o.total_price}</div>
-                <div>${new Date(o.created_at).toLocaleString()}</div>
+                <div>${o.created_at ? new Date(o.created_at).toLocaleString() : '时间未知'}</div>
                 <button onclick="cancelOrder('${o.id}')">取消订单</button>
             </div>
         `).join('');
@@ -406,7 +404,7 @@ async function guestLogin() {
     } catch(e) { alert('游客登录失败'); }
 }
 
-// ==================== 后台管理（商品库存管理 + 新产品上架） ====================
+// ==================== 后台管理 ====================
 function getAdminToken() { return sessionStorage.getItem('admin_token'); }
 function setAdminToken(token) { sessionStorage.setItem('admin_token', token); }
 
@@ -458,7 +456,7 @@ window.adjustStock = async (productId, delta) => {
         if (res.ok) {
             const data = await res.json();
             document.getElementById(`stock-${productId}`).innerText = data.stock;
-            loadProducts(); // 刷新前台商品列表
+            loadProducts();
         } else {
             const err = await res.json();
             alert('调整失败：' + (err.detail || '未知错误'));
@@ -576,19 +574,16 @@ function switchTab(tabId) {
         ordersView.classList.remove('hidden');
         loadOrders();
     } else if (tabId === 'admin') {
-        // 确保管理员验证
         (async () => {
             try {
-                // 先尝试加载数据，内部会触发密码输入
                 await loadAdminData();
                 adminView.classList.remove('hidden');
             } catch(e) {
                 console.error(e);
-                // 如果失败，切换到聊天标签
                 switchTab('chat');
             }
         })();
-        return; // 异步操作，先返回
+        return;
     }
 
     tabs.forEach(tab => {
@@ -616,17 +611,13 @@ async function queryOrder() {
     } catch(e) { document.getElementById('orderResult').innerHTML = '<span style="color:red;">查询失败</span>'; }
 }
 
-// ==================== 安全的事件绑定辅助函数 ====================
+// ==================== 事件绑定 ====================
 function safeAddEventListener(id, event, handler) {
     const el = document.getElementById(id);
-    if (el) {
-        el.addEventListener(event, handler);
-    } else {
-        console.error(`元素 #${id} 不存在，无法绑定事件`);
-    }
+    if (el) el.addEventListener(event, handler);
+    else console.error(`元素 #${id} 不存在`);
 }
 
-// ==================== 初始化 ====================
 function init() {
     console.log('✅ init 已执行');
     updateUserUI();

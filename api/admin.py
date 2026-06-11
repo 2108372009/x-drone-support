@@ -18,13 +18,13 @@ class FAQItem(BaseModel):
 class ProductCreate(BaseModel):
     name: str
     description: str
-    price: str          # 显示价格如 "¥3,499"
-    price_value: int    # 价格（分）
+    price: str
+    price_value: int
     stock: int
     image_url: Optional[str] = "/static/drone.jpg"
 
 class StockUpdate(BaseModel):
-    delta: int   # 正数增加库存，负数减少库存
+    delta: int
 
 def verify_admin(x_admin_token: str = Header(...)):
     if x_admin_token != ADMIN_SECRET:
@@ -33,7 +33,6 @@ def verify_admin(x_admin_token: str = Header(...)):
 
 @router.get("/admin/conversations")
 async def get_conversations(_: bool = Depends(verify_admin), db: Session = Depends(get_db)):
-    # 联表查询，获取用户名
     records = db.query(Conversation, User.username).outerjoin(User, Conversation.user_id == User.id).order_by(Conversation.timestamp.desc()).limit(50).all()
     result = []
     for conv, username in records:
@@ -68,7 +67,7 @@ async def delete_faq(question: str, _: bool = Depends(verify_admin), db: Session
     db.commit()
     return {"message": "删除成功"}
 
-# ==================== 新增商品管理接口 ====================
+# ==================== 商品管理接口 ====================
 @router.get("/admin/products")
 async def list_products(_: bool = Depends(verify_admin), db: Session = Depends(get_db)):
     products = db.query(Product).all()

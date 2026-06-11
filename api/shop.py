@@ -9,7 +9,6 @@ import jwt
 
 router = APIRouter(prefix="/shop", tags=["shop"])
 
-
 def get_current_user(authorization: str = Header(None), db: Session = Depends(get_db)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="缺少认证")
@@ -24,7 +23,6 @@ def get_current_user(authorization: str = Header(None), db: Session = Depends(ge
     except:
         raise HTTPException(status_code=401, detail="无效token")
 
-
 @router.get("/products")
 def list_products(db: Session = Depends(get_db)):
     products = db.query(Product).all()
@@ -37,15 +35,12 @@ def list_products(db: Session = Depends(get_db)):
         "image_url": p.image_url
     } for p in products]
 
-
 class PurchaseRequest(BaseModel):
     product_id: str
     quantity: int = 1
 
-
 @router.post("/purchase")
 def purchase(req: PurchaseRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # 游客禁止购买
     if user.is_guest == "1":
         raise HTTPException(status_code=403, detail="亲，游客模式不能购物，请先注册/登录账号再进行购买哦～")
 
@@ -72,19 +67,22 @@ def purchase(req: PurchaseRequest, user: User = Depends(get_current_user), db: S
     db.commit()
     return {"message": "购买成功", "order_id": order_id}
 
-
 @router.get("/orders")
 def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     orders = db.query(Order).filter(Order.user_id == user.id, Order.status == "active").order_by(
         Order.created_at.desc()).all()
-    return [{
-        "id": o.id,
-        "product_name": o.product_name,
-        "quantity": o.quantity,
-        "total_price": o.total_price,
-        "created_at": o.created_at.isoformat()
-    } for o in orders]
-
+    result = []
+    for o in orders:
+        # 防止 created_at 为 None 导致 isoformat 报错
+        created_at_str = o.created_at.isoformat() if o.created_at else ""
+        result.append({
+            "id": o.id,
+            "product_name": o.product_name,
+            "quantity": o.quantity,
+            "total_price": o.total_price,
+            "created_at": created_at_str
+        })
+    return result
 
 @router.delete("/orders/{order_id}")
 def cancel_order(order_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
