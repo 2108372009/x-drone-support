@@ -57,6 +57,16 @@ function formatLocalTime(utcString) {
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
+function safeParseDate(dateStr) {
+    if (!dateStr) return null;
+    if (typeof dateStr === 'number') return new Date(dateStr);
+    let d = new Date(dateStr);
+    if (!isNaN(d.getTime())) return d;
+    d = new Date(dateStr.replace(' ', 'T'));
+    if (!isNaN(d.getTime())) return d;
+    return null;
+}
+
 function updateUserUI() {
     if (currentToken && currentUserId) {
         userNameSpan.innerText = currentUsername || '用户';
@@ -177,7 +187,7 @@ function sendWelcomeMessage() {
     addMessage('ai', welcomeMsg, false);
 }
 
-// ==================== 历史对话（带认证） ====================
+// ==================== 历史对话 ====================
 async function showHistoryModal() {
     if (!currentToken) {
         alert('请先登录或注册查看您的历史对话');
@@ -217,8 +227,9 @@ function closeHistoryModal() { historyModal.style.display = 'none'; }
 function showOrderModal() { orderModal.style.display = 'flex'; document.getElementById('orderIdInput').value = ''; document.getElementById('orderResult').innerHTML = ''; }
 function closeOrderModal() { orderModal.style.display = 'none'; }
 
-// ==================== 商城模块（购买确认弹窗） ====================
+// ==================== 商城模块 ====================
 async function loadProducts() {
+    console.log('加载商品列表');
     try {
         const res = await fetch(`${API_BASE}/api/shop/products`);
         const products = await res.json();
@@ -246,16 +257,21 @@ async function loadProducts() {
 }
 
 async function buyProduct(productId) {
+    console.log('buyProduct 被调用，商品ID：', productId);
     if (!currentToken) { alert('请先登录或注册'); showLoginModal(); return; }
     if (localStorage.getItem('is_guest') === 'true') {
         alert('亲，游客模式不能购物，请先注册/登录账号再进行购买哦～');
         return;
     }
     const qtyInput = document.getElementById(`qty-${productId}`);
-    if (!qtyInput) return;
+    if (!qtyInput) { console.error('找不到数量输入框'); return; }
     const quantity = parseInt(qtyInput.value) || 1;
     const confirmMsg = `确认购买此商品吗？\n数量：${quantity}`;
-    if (!confirm(confirmMsg)) return;
+    console.log('准备弹出确认框');
+    if (!confirm(confirmMsg)) {
+        console.log('用户取消购买');
+        return;
+    }
     try {
         const res = await fetch(`${API_BASE}/api/shop/purchase`, {
             method: 'POST',
@@ -275,31 +291,29 @@ async function buyProduct(productId) {
 
 // ==================== 订单模块 ====================
 async function loadOrders() {
+    console.log('加载订单');
     if (!currentToken) {
         document.getElementById('ordersList').innerHTML = '<p>请先登录查看订单</p>';
         return;
     }
     try {
         const res = await fetch(`${API_BASE}/api/shop/orders`, { headers: { 'Authorization': `Bearer ${currentToken}` } });
-        if (!res.ok) {
-            if (res.status === 401) {
-                alert('登录已过期，请重新登录');
-                clearAuth();
-                return;
-            }
-            throw new Error('加载失败');
-        }
+        if (!res.ok) throw new Error('加载失败');
         const orders = await res.json();
         const container = document.getElementById('ordersList');
         if (!orders.length) { container.innerHTML = '<p>暂无订单</p>'; return; }
-        container.innerHTML = orders.map(o => `
-            <div class="order-item">
-                <div><strong>${escapeHtml(o.product_name)}</strong> × ${o.quantity}</div>
-                <div>总价 ${o.total_price}</div>
-                <div>${o.created_at ? new Date(o.created_at).toLocaleString() : '时间未知'}</div>
-                <button onclick="cancelOrder('${o.id}')">取消订单</button>
-            </div>
-        `).join('');
+        container.innerHTML = orders.map(o => {
+            const dateObj = safeParseDate(o.created_at);
+            const dateStr = dateObj ? dateObj.toLocaleString() : '时间未知';
+            return `
+                <div class="order-item">
+                    <div><strong>${escapeHtml(o.product_name)}</strong> × ${o.quantity}</div>
+                    <div>总价 ${o.total_price}</div>
+                    <div>${dateStr}</div>
+                    <button onclick="cancelOrder('${o.id}')">取消订单</button>
+                </div>
+            `;
+        }).join('');
     } catch(e) { console.error(e); document.getElementById('ordersList').innerHTML = '<p>加载失败，请重试</p>'; }
 }
 
@@ -425,11 +439,24 @@ async function fetchWithAdminToken(url, options = {}) {
 }
 
 async function loadProductManagement() {
+    console.log('加载商品管理数据');
     try {
         const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products`);
+        if (!res.ok) {
+            console.error('商品列表请求失败', res.status);
+            throw new Error(`HTTP ${res.status}`);
+        }
         const products = await res.json();
+        console.log('商品数据：', products);
         const tbody = document.querySelector('#productTable tbody');
-        if (!tbody) return;
+        if (!tbody) {
+            console.error('找不到 productTable tbody');
+            return;
+        }
+        if (products.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4">暂无商品，请点击“上架新产品”添加</td></tr>';
+            return;
+        }
         tbody.innerHTML = products.map(p => `
             <tr>
                 <td>${escapeHtml(p.name)}</td>
@@ -443,10 +470,14 @@ async function loadProductManagement() {
                 </td>
             </tr>
         `).join('');
-    } catch(e) { console.error(e); alert("加载商品列表失败，请检查管理员权限"); }
+    } catch(e) {
+        console.error('加载商品列表失败：', e);
+        alert('加载商品列表失败，请检查管理员密码是否正确或网络连接');
+    }
 }
 
 window.adjustStock = async (productId, delta) => {
+    console.log('调整库存', productId, delta);
     try {
         const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products/${productId}/stock`, {
             method: 'PATCH',
@@ -465,6 +496,7 @@ window.adjustStock = async (productId, delta) => {
 };
 
 window.addNewProduct = async () => {
+    console.log('addNewProduct 函数被调用');
     const name = document.getElementById('newProdName').value.trim();
     const description = document.getElementById('newProdDesc').value.trim();
     const price = document.getElementById('newProdPrice').value.trim();
@@ -476,6 +508,7 @@ window.addNewProduct = async () => {
         return;
     }
     if (!imageUrl) imageUrl = '/static/drone.jpg';
+    console.log('提交新产品数据：', { name, description, price, priceValue, stock, imageUrl });
     try {
         const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products`, {
             method: 'POST',
@@ -496,10 +529,11 @@ window.addNewProduct = async () => {
             const err = await res.json();
             alert('上架失败：' + (err.detail || '未知错误'));
         }
-    } catch(e) { alert('网络错误'); }
+    } catch(e) { console.error(e); alert('网络错误'); }
 };
 
 async function loadAdminData() {
+    console.log('加载后台数据');
     try {
         const logsResp = await fetchWithAdminToken(`${API_BASE}/api/admin/conversations`);
         const logs = await logsResp.json();
@@ -644,7 +678,17 @@ function init() {
     });
     safeAddEventListener('guestLoginBtn', 'click', guestLogin);
     safeAddEventListener('addFaqBtn', 'click', window.addFaq);
-    safeAddEventListener('addProductBtn', 'click', window.addNewProduct);
+
+    // 修复上架新产品按钮事件绑定
+    const addProductBtn = document.getElementById('addProductBtn');
+    if (addProductBtn) {
+        addProductBtn.addEventListener('click', () => {
+            console.log('上架新产品按钮被点击');
+            window.addNewProduct();
+        });
+    } else {
+        console.error('找不到 addProductBtn 元素');
+    }
 
     document.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', () => switchTab(tab.getAttribute('data-tab')));
