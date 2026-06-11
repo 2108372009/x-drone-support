@@ -197,7 +197,7 @@ function sendWelcomeMessage() {
     addMessage('ai', welcomeMsg, false);
 }
 
-// ==================== 历史对话（需登录） ====================
+// ==================== 历史对话 ====================
 async function showHistoryModal() {
     if (!requireLogin()) return;
     const bodyDiv = document.getElementById('historyModalBody');
@@ -240,21 +240,25 @@ async function loadProducts() {
         const products = await res.json();
         const container = document.getElementById('productList');
         if (!container) return;
-        container.innerHTML = products.map(p => `
+        container.innerHTML = products.map(p => {
+            const stockText = p.stock === 0 ? '已售罄' : `库存: ${p.stock}`;
+            const disabledAttr = p.stock === 0 ? 'disabled' : '';
+            return `
             <div class="product-card">
                 <h4>${escapeHtml(p.name)}</h4>
                 <p>${escapeHtml(p.description)}</p>
                 <div class="price">${p.price}</div>
-                <div class="stock">库存: ${p.stock}</div>
+                <div class="stock">${stockText}</div>
                 <div class="buy-action">
-                    <input type="number" min="1" max="${p.stock}" value="1" id="qty-${p.id}" ${p.stock===0?'disabled':''}>
-                    <button class="buy-btn" data-id="${p.id}" ${p.stock===0?'disabled':''}>购买</button>
+                    <input type="number" min="1" max="${p.stock}" value="1" id="qty-${p.id}" ${disabledAttr}>
+                    <button class="buy-btn" data-id="${p.id}" ${disabledAttr}>购买</button>
                 </div>
             </div>
-        `).join('');
+        `}).join('');
         document.querySelectorAll('.buy-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const productId = btn.getAttribute('data-id');
+                if (btn.disabled) return;
                 buyProduct(productId);
             });
         });
@@ -285,7 +289,7 @@ async function buyProduct(productId) {
     } catch(e) { alert('网络错误'); }
 }
 
-// ==================== 订单模块（需登录） ====================
+// ==================== 订单模块 ====================
 async function loadOrders() {
     if (!requireLogin()) {
         document.getElementById('ordersList').innerHTML = '<p>请先登录查看订单</p>';
@@ -428,25 +432,28 @@ async function loadProductManagement() {
         const tbody = document.querySelector('#productTable tbody');
         if (!tbody) return;
         if (products.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4">暂无商品，请点击“上架新产品”添加</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5">暂无商品，请点击“上架新产品”添加</td></tr>';
             return;
         }
-        tbody.innerHTML = products.map(p => `
+        tbody.innerHTML = products.map(p => {
+            const stockDisplay = p.stock === 0 ? '已售罄' : p.stock;
+            return `
             <tr>
                 <td>${escapeHtml(p.name)}</td>
                 <td>${p.price}</td>
-                <td id="stock-${p.id}">${p.stock}</td>
+                <td id="stock-${p.id}">${stockDisplay}</td>
                 <td>
                     <button class="small" onclick="adjustStock('${p.id}', 1)">+1</button>
                     <button class="small" onclick="adjustStock('${p.id}', -1)">-1</button>
                     <button class="small" onclick="adjustStock('${p.id}', 10)">+10</button>
                     <button class="small" onclick="adjustStock('${p.id}', -10)">-10</button>
-                 </td>
-             </tr>
-        `).join('');
+                    <button class="small" style="background:#dc3545; margin-left:8px;" onclick="deleteProduct('${p.id}')">下架</button>
+                  </td>
+            </tr>
+        `}).join('');
     } catch(e) {
         console.error(e);
-        alert('加载商品列表失败，请检查管理员密码是否正确或网络连接');
+        alert('加载商品列表失败，请检查管理员权限');
     }
 }
 
@@ -459,8 +466,13 @@ window.adjustStock = async (productId, delta) => {
         });
         if (res.ok) {
             const data = await res.json();
-            document.getElementById(`stock-${productId}`).innerText = data.stock;
-            loadProducts();
+            // 更新表格中的库存显示
+            const stockCell = document.getElementById(`stock-${productId}`);
+            if (stockCell) {
+                const newStock = data.stock;
+                stockCell.innerText = newStock === 0 ? '已售罄' : newStock;
+            }
+            loadProducts(); // 刷新前台商城
         } else {
             const err = await res.json();
             alert('调整失败：' + (err.detail || '未知错误'));
@@ -471,27 +483,41 @@ window.adjustStock = async (productId, delta) => {
 window.addNewProduct = async () => {
     const name = document.getElementById('newProdName').value.trim();
     const description = document.getElementById('newProdDesc').value.trim();
-    const price = document.getElementById('newProdPrice').value.trim();
-    const priceValue = parseInt(document.getElementById('newProdPriceValue').value);
+    const priceDisplay = document.getElementById('newProdPrice').value.trim();  // 如 "¥3,499"
+    const priceYuan = parseFloat(document.getElementById('newProdPriceYuan').value);
     const stock = parseInt(document.getElementById('newProdStock').value);
     let imageUrl = document.getElementById('newProdImage').value.trim();
-    if (!name || !description || !price || isNaN(priceValue) || isNaN(stock)) {
-        alert('请完整填写商品信息（名称、描述、显示价格、价格(分)、库存）');
+
+    if (!name || !description || !priceDisplay || isNaN(priceYuan) || isNaN(stock)) {
+        alert('请完整填写商品信息（名称、描述、显示价格、价格(元)、库存）');
         return;
     }
+    if (priceYuan <= 0) {
+        alert('价格必须大于0');
+        return;
+    }
+    const priceValue = Math.round(priceYuan * 100); // 转换为分
     if (!imageUrl) imageUrl = '/static/drone.jpg';
+
     try {
         const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, description, price, price_value: priceValue, stock, image_url: imageUrl })
+            body: JSON.stringify({
+                name,
+                description,
+                price: priceDisplay,
+                price_value: priceValue,
+                stock,
+                image_url: imageUrl
+            })
         });
         if (res.ok) {
             alert('新产品上架成功');
             document.getElementById('newProdName').value = '';
             document.getElementById('newProdDesc').value = '';
             document.getElementById('newProdPrice').value = '';
-            document.getElementById('newProdPriceValue').value = '';
+            document.getElementById('newProdPriceYuan').value = '';
             document.getElementById('newProdStock').value = '';
             document.getElementById('newProdImage').value = '';
             loadProductManagement();
@@ -499,6 +525,23 @@ window.addNewProduct = async () => {
         } else {
             const err = await res.json();
             alert('上架失败：' + (err.detail || '未知错误'));
+        }
+    } catch(e) { alert('网络错误'); }
+};
+
+window.deleteProduct = async (productId) => {
+    if (!confirm('确定要下架并删除此商品吗？删除后不可恢复。')) return;
+    try {
+        const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products/${productId}`, {
+            method: 'DELETE'
+        });
+        if (res.ok) {
+            alert('商品已下架删除');
+            loadProductManagement();
+            loadProducts();
+        } else {
+            const err = await res.json();
+            alert('删除失败：' + (err.detail || '未知错误'));
         }
     } catch(e) { alert('网络错误'); }
 };
@@ -515,7 +558,7 @@ async function loadAdminData() {
                 <td>${escapeHtml(l.session_id)}</td>
                 <td>${escapeHtml(l.user_message)}</td>
                 <td>${escapeHtml(l.ai_reply)}</td>
-             </tr>
+            </tr>
         `).join('');
     } catch(e) { console.error(e); alert("加载对话记录失败"); }
     try {
@@ -527,7 +570,7 @@ async function loadAdminData() {
                 <td>${escapeHtml(f.question)}</td>
                 <td>${escapeHtml(f.answer)}</td>
                 <td><button class="delete-btn" onclick="deleteFaq('${f.question.replace(/'/g, "\\'")}')">删除</button></td>
-             </tr>
+            </tr>
         `).join('');
     } catch(e) { alert("加载FAQ失败"); }
     await loadProductManagement();
@@ -596,7 +639,7 @@ function switchTab(tabId) {
         }
         adminView.classList.remove('hidden');
         const productTbody = document.querySelector('#productTable tbody');
-        if (productTbody) productTbody.innerHTML = '<tr><td colspan="4">加载中...</td></tr>';
+        if (productTbody) productTbody.innerHTML = '<tr><td colspan="5">加载中...</td></tr>';
         loadAdminData().catch(err => {
             console.error(err);
             alert('加载后台数据失败，请检查管理员密码或网络');
