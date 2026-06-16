@@ -41,7 +41,8 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
         id=user_id,
         username=req.username,
         password_hash=hash_password(req.password),
-        is_guest="0"
+        is_guest="0",
+        role="user"           # 新增：默认为普通用户
     )
     db.add(new_user)
     db.commit()
@@ -64,7 +65,8 @@ def guest_login(db: Session = Depends(get_db)):
         id=user_id,
         username=guest_name,
         password_hash="",
-        is_guest="1"
+        is_guest="1",
+        role="user"          # 游客也是普通用户
     )
     db.add(new_user)
     db.commit()

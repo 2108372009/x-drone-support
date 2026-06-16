@@ -41,6 +41,10 @@ function getCurrentTime() {
 
 function formatLocalTime(utcString) {
     if (!utcString) return '';
+    // 如果已经是格式化好的，直接返回
+    if (utcString.includes('-') && utcString.includes(':')) {
+        return utcString;
+    }
     let date;
     if (utcString.includes('T')) {
         date = new Date(utcString);
@@ -299,8 +303,8 @@ async function loadOrders() {
         const container = document.getElementById('ordersList');
         if (!orders.length) { container.innerHTML = '<p>暂无订单</p>'; return; }
         container.innerHTML = orders.map(o => {
-            const dateObj = safeParseDate(o.created_at);
-            const dateStr = dateObj ? dateObj.toLocaleString() : '时间未知';
+            // 直接使用后端返回的时间字符串
+            const dateStr = o.created_at || '时间未知';
             return `
                 <div class="order-item">
                     <div><strong>${escapeHtml(o.product_name)}</strong> × ${o.quantity}</div>
@@ -402,30 +406,31 @@ async function handleRegister() {
     }
 }
 
-// ==================== 后台管理 ====================
-function getAdminToken() { return sessionStorage.getItem('admin_token'); }
-function setAdminToken(token) { sessionStorage.setItem('admin_token', token); }
-
+// ==================== 后台管理（修改验证方式） ====================
+// 移除 getAdminToken / setAdminToken，直接使用当前用户的 Bearer token
 async function fetchWithAdminToken(url, options = {}) {
-    let token = getAdminToken();
-    if (!token) {
-        const pwd = prompt("请输入管理员密码：");
-        if (pwd === "1234") {
-            setAdminToken(pwd);
-            token = pwd;
-        } else {
-            alert("权限不够，拒绝访问");
-            throw new Error("Unauthorized");
-        }
+    if (!currentToken) {
+        alert('请先登录');
+        throw new Error('未登录');
     }
-    const headers = { ...options.headers, 'X-Admin-Token': token };
+    const headers = {
+        ...options.headers,
+        'Authorization': `Bearer ${currentToken}`
+    };
     return fetch(url, { ...options, headers });
 }
 
+// ---- 加载商品管理（不变） ----
 async function loadProductManagement() {
     try {
         const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+            if (res.status === 403) {
+                alert('您不是管理员，无权访问');
+                return;
+            }
+            throw new Error(`HTTP ${res.status}`);
+        }
         const products = await res.json();
         const tbody = document.querySelector('#productTable tbody');
         if (!tbody) return;
@@ -449,7 +454,7 @@ async function loadProductManagement() {
         `).join('');
     } catch(e) {
         console.error(e);
-        alert('加载商品列表失败，请检查管理员权限');
+        alert('加载商品列表失败');
     }
 }
 
@@ -466,7 +471,7 @@ window.adjustStock = async (productId, delta) => {
             if (stockCell) {
                 stockCell.innerText = data.stock;
             }
-            loadProducts(); // 刷新前台商城
+            loadProducts();
         } else {
             const err = await res.json();
             alert('调整失败：' + (err.detail || '未知错误'));
@@ -531,11 +536,17 @@ window.deleteProduct = async (productId) => {
     } catch(e) { alert('网络错误'); }
 };
 
-// ==================== 新增：管理员订单管理 ====================
+// ==================== 管理员订单管理 ====================
 async function loadAdminOrders() {
     try {
         const res = await fetchWithAdminToken(`${API_BASE}/api/admin/orders`);
-        if (!res.ok) throw new Error('加载订单失败');
+        if (!res.ok) {
+            if (res.status === 403) {
+                alert('您不是管理员，无权查看订单');
+                return;
+            }
+            throw new Error('加载订单失败');
+        }
         const orders = await res.json();
         const tbody = document.querySelector('#adminOrderTable tbody');
         if (!tbody) return;
@@ -575,8 +586,7 @@ window.updateOrderStatus = async (orderId, newStatus) => {
         });
         if (res.ok) {
             alert('状态更新成功');
-            loadAdminOrders();  // 刷新表格
-            // 如果当前在“我的订单”页面，也刷新（可选）
+            loadAdminOrders();
             if (document.querySelector('.tab.active')?.getAttribute('data-tab') === 'orders') {
                 loadOrders();
             }
@@ -589,10 +599,54 @@ window.updateOrderStatus = async (orderId, newStatus) => {
     }
 };
 
+// ==================== 添加管理员功能 ====================
+function showAddAdminModal() {
+    document.getElementById('addAdminModal').style.display = 'flex';
+    document.getElementById('newAdminName').value = '';
+    document.getElementById('newAdminPwd1').value = '';
+    document.getElementById('newAdminPwd2').value = '';
+}
+function closeAddAdminModal() {
+    document.getElementById('addAdminModal').style.display = 'none';
+}
+
+async function confirmAddAdmin() {
+    const username = document.getElementById('newAdminName').value.trim();
+    const pwd1 = document.getElementById('newAdminPwd1').value;
+    const pwd2 = document.getElementById('newAdminPwd2').value;
+    if (!username) { alert('请输入管理员昵称'); return; }
+    if (pwd1.length < 6) { alert('密码至少6位'); return; }
+    if (pwd1 !== pwd2) { alert('两次密码不一致'); return; }
+    try {
+        const res = await fetchWithAdminToken(`${API_BASE}/api/admin/users`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password: pwd1 })
+        });
+        if (res.ok) {
+            alert('系统已成功添加管理员');
+            closeAddAdminModal();
+            // 可刷新管理员列表（如有需要）
+        } else {
+            const err = await res.json();
+            alert('添加失败：' + (err.detail || '未知错误'));
+        }
+    } catch(e) {
+        alert('网络错误');
+    }
+}
+
 // ==================== 加载后台数据 ====================
 async function loadAdminData() {
     try {
         const logsResp = await fetchWithAdminToken(`${API_BASE}/api/admin/conversations`);
+        if (!logsResp.ok) {
+            if (logsResp.status === 403) {
+                alert('您不是管理员，无权查看后台');
+                return;
+            }
+            throw new Error('加载对话记录失败');
+        }
         const logs = await logsResp.json();
         const tbody = document.querySelector('#logTable tbody');
         tbody.innerHTML = logs.map(l => `
@@ -618,7 +672,7 @@ async function loadAdminData() {
         `).join('');
     } catch(e) { alert("加载FAQ失败"); }
     await loadProductManagement();
-    await loadAdminOrders();        // 新增：加载订单管理
+    await loadAdminOrders();
 }
 
 window.deleteFaq = async function(question) {
@@ -687,9 +741,9 @@ function switchTab(tabId) {
         if (productTbody) productTbody.innerHTML = '<tr><td colspan="5">加载中...</td></tr>';
         loadAdminData().catch(err => {
             console.error(err);
-            alert('加载后台数据失败，请检查管理员密码或网络');
+            alert('加载后台数据失败，请检查权限');
         });
-        // 折叠按钮事件绑定（只绑定一次）
+        // 折叠按钮事件绑定
         const toggleBtn = document.getElementById('toggleLogBtn');
         if (toggleBtn && !toggleBtn._listener) {
             toggleBtn._listener = true;
@@ -701,6 +755,10 @@ function switchTab(tabId) {
                 arrow.classList.toggle('fa-chevron-right');
             });
         }
+        // 添加管理员按钮
+        document.getElementById('addAdminBtn')?.addEventListener('click', showAddAdminModal);
+        document.getElementById('closeAddAdminBtn')?.addEventListener('click', closeAddAdminModal);
+        document.getElementById('confirmAddAdminBtn')?.addEventListener('click', confirmAddAdmin);
     }
 }
 
@@ -780,6 +838,7 @@ function init() {
         if (event.target === historyModal) closeHistoryModal();
         if (event.target === orderModal) closeOrderModal();
         if (event.target === loginModal) closeLoginModal();
+        if (event.target === document.getElementById('addAdminModal')) closeAddAdminModal();
     };
 }
 

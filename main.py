@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
+import uuid
 
 print("--- 程序开始启动 ---")
 
@@ -14,7 +15,8 @@ from api.chat import router as chat_router
 from api.admin import router as admin_router
 from api.auth import router as auth_router
 from api.shop import router as shop_router
-from api.db import Product
+from api.db import Product, User
+from api.auth import hash_password
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -22,6 +24,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
+        # ===== 商品数据初始化 =====
         if db.query(Product).count() == 0:
             items = [
                 Product(id="prod_pro", name="X-Drone Pro 专业旗舰版", description="1英寸传感器，45分钟续航，全向避障", price="¥8,999", price_value=899900, stock=10),
@@ -34,6 +37,32 @@ async def lifespan(app: FastAPI):
                 db.add(p)
             db.commit()
             print("✅ 商品数据初始化完成")
+
+        # ===== 初始化默认管理员 =====
+        admin_exists = db.query(User).filter(User.role == "admin").first()
+        if not admin_exists:
+            admin = User(
+                id=f"usr_{uuid.uuid4().hex[:12]}",
+                username="阮志男",
+                password_hash=hash_password("222qqq"),
+                is_guest="0",
+                role="admin"
+            )
+            db.add(admin)
+            db.commit()
+            print("✅ 初始管理员创建成功：阮志男")
+        else:
+            print("✅ 管理员已存在，跳过创建")
+
+        # ===== 迁移旧订单状态（如果使用Supabase手动执行过，可忽略） =====
+        try:
+            db.execute("UPDATE orders SET status = '待发货' WHERE status = 'active'")
+            db.execute("UPDATE orders SET status = '已取消' WHERE status = 'cancelled'")
+            db.commit()
+            print("✅ 订单状态迁移完成")
+        except Exception as e:
+            print("⚠️ 订单状态迁移跳过（可能已有新状态）:", e)
+
     finally:
         db.close()
     print("✅ 数据库表检查/创建完成")

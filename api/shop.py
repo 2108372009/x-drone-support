@@ -6,6 +6,7 @@ from .database import get_db
 from .db import Product, Order, User
 from .auth import SECRET_KEY, ALGORITHM
 import jwt
+from datetime import datetime
 
 router = APIRouter(prefix="/shop", tags=["shop"])
 
@@ -61,7 +62,7 @@ def purchase(req: PurchaseRequest, user: User = Depends(get_current_user), db: S
         quantity=req.quantity,
         total_price=total_str,
         total_value=total_val,
-        status="待发货"          # 修改点：明确设置状态
+        status="待发货"
     )
     db.add(new_order)
     db.commit()
@@ -71,20 +72,16 @@ def purchase(req: PurchaseRequest, user: User = Depends(get_current_user), db: S
 def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     orders = db.query(Order).filter(
         Order.user_id == user.id,
-        Order.status != "已取消"      # 修改点：只显示未取消的订单
+        Order.status != "已取消"
     ).order_by(Order.created_at.desc()).all()
     result = []
     for o in orders:
+        # 格式化时间
         if o.created_at:
-            if hasattr(o.created_at, 'isoformat'):
-                created_at_str = o.created_at.isoformat()
+            if isinstance(o.created_at, datetime):
+                created_at_str = o.created_at.strftime("%Y-%m-%d %H:%M:%S")
             else:
-                try:
-                    from datetime import datetime
-                    dt = datetime.fromisoformat(str(o.created_at))
-                    created_at_str = dt.isoformat()
-                except:
-                    created_at_str = ""
+                created_at_str = str(o.created_at)
         else:
             created_at_str = ""
         result.append({
@@ -92,8 +89,8 @@ def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_
             "product_name": o.product_name,
             "quantity": o.quantity,
             "total_price": o.total_price,
-            "created_at": created_at_str,
-            "status": o.status          # 修改点：返回状态
+            "created_at": created_at_str,   # 直接返回格式化字符串
+            "status": o.status
         })
     return result
 
@@ -107,6 +104,6 @@ def cancel_order(order_id: str, user: User = Depends(get_current_user), db: Sess
     product = db.query(Product).filter(Product.id == order.product_id).first()
     if product:
         product.stock += order.quantity
-    order.status = "已取消"            # 修改点：改为中文状态
+    order.status = "已取消"
     db.commit()
     return {"message": "订单已取消，库存已恢复"}

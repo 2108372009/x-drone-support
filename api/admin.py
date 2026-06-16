@@ -1,15 +1,17 @@
 import os
 import uuid
+import jwt
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
 from .database import get_db
 from .db import FAQ, Conversation, User, Product, Order
+from .auth import SECRET_KEY, ALGORITHM, hash_password
 
 router = APIRouter()
 
-ADMIN_SECRET = os.getenv("ADMIN_SECRET", "1234")
+# 移除 ADMIN_SECRET，不再使用
 
 class FAQItem(BaseModel):
     question: str
@@ -26,16 +28,34 @@ class ProductCreate(BaseModel):
 class StockUpdate(BaseModel):
     delta: int
 
-class OrderStatusUpdate(BaseModel):          # 新增：订单状态更新模型
-    status: str   # 待发货、运输中、已送达
+class OrderStatusUpdate(BaseModel):
+    status: str
 
-def verify_admin(x_admin_token: str = Header(...)):
-    if x_admin_token != ADMIN_SECRET:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    return True
+class CreateAdminRequest(BaseModel):
+    username: str
+    password: str
+
+# 新的验证依赖：通过 JWT 获取当前用户，并检查是否为管理员
+def verify_admin(authorization: str = Header(None), db: Session = Depends(get_db)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="请先登录")
+    token = authorization.split(" ")[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="用户不存在")
+        if user.role != "admin":
+            raise HTTPException(status_code=403, detail="无权限，仅管理员可访问")
+        return user
+    except:
+        raise HTTPException(status_code=401, detail="无效token")
+
+# ----- 以下所有路由的依赖改为 user: User = Depends(verify_admin) -----
 
 @router.get("/admin/conversations")
-async def get_conversations(_: bool = Depends(verify_admin), db: Session = Depends(get_db)):
+async def get_conversations(user: User = Depends(verify_admin), db: Session = Depends(get_db)):
     records = db.query(Conversation, User.username).outerjoin(User, Conversation.user_id == User.id).order_by(Conversation.timestamp.desc()).limit(50).all()
     result = []
     for conv, username in records:
@@ -50,11 +70,11 @@ async def get_conversations(_: bool = Depends(verify_admin), db: Session = Depen
     return result
 
 @router.get("/admin/faqs")
-async def get_faqs(_: bool = Depends(verify_admin), db: Session = Depends(get_db)):
+async def get_faqs(user: User = Depends(verify_admin), db: Session = Depends(get_db)):
     return db.query(FAQ).all()
 
 @router.post("/admin/faqs")
-async def save_faq(item: FAQItem, _: bool = Depends(verify_admin), db: Session = Depends(get_db)):
+async def save_faq(item: FAQItem, user: User = Depends(verify_admin), db: Session = Depends(get_db)):
     faq = db.query(FAQ).filter(FAQ.question == item.question).first()
     if faq:
         faq.answer = item.answer
@@ -65,14 +85,14 @@ async def save_faq(item: FAQItem, _: bool = Depends(verify_admin), db: Session =
     return {"message": "保存成功"}
 
 @router.delete("/admin/faqs")
-async def delete_faq(question: str, _: bool = Depends(verify_admin), db: Session = Depends(get_db)):
+async def delete_faq(question: str, user: User = Depends(verify_admin), db: Session = Depends(get_db)):
     db.query(FAQ).filter(FAQ.question == question).delete()
     db.commit()
     return {"message": "删除成功"}
 
 # ==================== 商品管理接口 ====================
 @router.get("/admin/products")
-async def list_products(_: bool = Depends(verify_admin), db: Session = Depends(get_db)):
+async def list_products(user: User = Depends(verify_admin), db: Session = Depends(get_db)):
     products = db.query(Product).all()
     return [{
         "id": p.id,
@@ -85,7 +105,7 @@ async def list_products(_: bool = Depends(verify_admin), db: Session = Depends(g
     } for p in products]
 
 @router.post("/admin/products")
-async def create_product(item: ProductCreate, _: bool = Depends(verify_admin), db: Session = Depends(get_db)):
+async def create_product(item: ProductCreate, user: User = Depends(verify_admin), db: Session = Depends(get_db)):
     new_id = f"prod_{uuid.uuid4().hex[:12]}"
     product = Product(
         id=new_id,
@@ -101,7 +121,7 @@ async def create_product(item: ProductCreate, _: bool = Depends(verify_admin), d
     return {"id": new_id, "message": "新产品已上架"}
 
 @router.patch("/admin/products/{product_id}/stock")
-async def update_stock(product_id: str, update: StockUpdate, _: bool = Depends(verify_admin), db: Session = Depends(get_db)):
+async def update_stock(product_id: str, update: StockUpdate, user: User = Depends(verify_admin), db: Session = Depends(get_db)):
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="商品不存在")
@@ -113,7 +133,7 @@ async def update_stock(product_id: str, update: StockUpdate, _: bool = Depends(v
     return {"id": product_id, "stock": product.stock}
 
 @router.delete("/admin/products/{product_id}")
-async def delete_product(product_id: str, _: bool = Depends(verify_admin), db: Session = Depends(get_db)):
+async def delete_product(product_id: str, user: User = Depends(verify_admin), db: Session = Depends(get_db)):
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="商品不存在")
@@ -121,9 +141,9 @@ async def delete_product(product_id: str, _: bool = Depends(verify_admin), db: S
     db.commit()
     return {"message": "商品已下架删除"}
 
-# ==================== 新增：订单管理接口 ====================
+# ==================== 订单管理接口 ====================
 @router.get("/admin/orders")
-async def get_all_orders(_: bool = Depends(verify_admin), db: Session = Depends(get_db)):
+async def get_all_orders(user: User = Depends(verify_admin), db: Session = Depends(get_db)):
     orders = db.query(Order, User.username).join(User, Order.user_id == User.id).order_by(Order.created_at.desc()).limit(100).all()
     result = []
     for order, username in orders:
@@ -134,12 +154,12 @@ async def get_all_orders(_: bool = Depends(verify_admin), db: Session = Depends(
             "quantity": order.quantity,
             "total_price": order.total_price,
             "status": order.status,
-            "created_at": order.created_at.isoformat() if order.created_at else None
+            "created_at": order.created_at.strftime("%Y-%m-%d %H:%M:%S") if order.created_at else None
         })
     return result
 
 @router.patch("/admin/orders/{order_id}/status")
-async def update_order_status(order_id: str, update: OrderStatusUpdate, _: bool = Depends(verify_admin), db: Session = Depends(get_db)):
+async def update_order_status(order_id: str, update: OrderStatusUpdate, user: User = Depends(verify_admin), db: Session = Depends(get_db)):
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="订单不存在")
@@ -149,3 +169,22 @@ async def update_order_status(order_id: str, update: OrderStatusUpdate, _: bool 
     order.status = update.status
     db.commit()
     return {"message": "状态更新成功", "new_status": order.status}
+
+# ==================== 添加管理员接口 ====================
+@router.post("/admin/users")
+async def create_admin(req: CreateAdminRequest, current_admin: User = Depends(verify_admin), db: Session = Depends(get_db)):
+    # 检查用户名是否已存在
+    existing = db.query(User).filter(User.username == req.username).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="用户名已存在")
+    # 创建新管理员
+    new_user = User(
+        id=f"usr_{uuid.uuid4().hex[:12]}",
+        username=req.username,
+        password_hash=hash_password(req.password),
+        is_guest="0",
+        role="admin"
+    )
+    db.add(new_user)
+    db.commit()
+    return {"message": f"管理员 {req.username} 添加成功"}
