@@ -65,16 +65,6 @@ function formatLocalTime(utcString) {
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
-function safeParseDate(dateStr) {
-    if (!dateStr) return null;
-    if (typeof dateStr === 'number') return new Date(dateStr);
-    let d = new Date(dateStr);
-    if (!isNaN(d.getTime())) return d;
-    d = new Date(dateStr.replace(' ', 'T'));
-    if (!isNaN(d.getTime())) return d;
-    return null;
-}
-
 function requireLogin() {
     if (!currentToken) {
         alert('请先注册/登录账号再进行此操作');
@@ -414,19 +404,33 @@ async function handleRegister() {
     }
 }
 
-// ==================== 后台管理（防重复弹窗） ====================
-// 带权限验证的请求，只弹一次窗
+// ==================== 后台管理（彻底防重复弹窗） ====================
+// 带权限验证的请求，只弹一次窗（区分401和403）
 async function fetchWithAdminToken(url, options = {}) {
     if (!currentToken) {
-        alert('请先登录');
-        throw new Error('未登录');
+        // 未登录，提示一次
+        if (!adminAccessDenied && !isAdminAlerting) {
+            isAdminAlerting = true;
+            adminAccessDenied = true;
+            alert('请先登录再访问后台');
+        }
+        throw new Error('NotLoggedIn');
     }
     const headers = {
         ...options.headers,
         'Authorization': `Bearer ${currentToken}`
     };
     const response = await fetch(url, { ...options, headers });
-    // 如果是 403 且尚未提示过，则弹出一次
+    if (response.status === 401) {
+        if (!adminAccessDenied && !isAdminAlerting) {
+            isAdminAlerting = true;
+            adminAccessDenied = true;
+            alert('登录已过期，请重新登录');
+            clearAuth();
+            showLoginModal();
+        }
+        throw new Error('Unauthorized');
+    }
     if (response.status === 403) {
         if (!adminAccessDenied && !isAdminAlerting) {
             isAdminAlerting = true;
@@ -473,7 +477,10 @@ async function loadProductManagement() {
             </tr>
         `).join('');
     } catch(e) {
-        if (e.message === 'Forbidden') return;
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
+            showNoPermission();
+            return;
+        }
         console.error(e);
         alert('加载商品列表失败');
     }
@@ -498,7 +505,13 @@ window.adjustStock = async (productId, delta) => {
             const err = await res.json();
             alert('调整失败：' + (err.detail || '未知错误'));
         }
-    } catch(e) { if (e.message !== 'Forbidden') alert('网络错误'); }
+    } catch(e) {
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
+            showNoPermission();
+            return;
+        }
+        alert('网络错误');
+    }
 };
 
 window.addNewProduct = async () => {
@@ -541,7 +554,13 @@ window.addNewProduct = async () => {
             const err = await res.json();
             alert('上架失败：' + (err.detail || '未知错误'));
         }
-    } catch(e) { if (e.message !== 'Forbidden') alert('网络错误'); }
+    } catch(e) {
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
+            showNoPermission();
+            return;
+        }
+        alert('网络错误');
+    }
 };
 
 window.deleteProduct = async (productId) => {
@@ -557,7 +576,13 @@ window.deleteProduct = async (productId) => {
             const err = await res.json();
             alert('删除失败：' + (err.detail || '未知错误'));
         }
-    } catch(e) { if (e.message !== 'Forbidden') alert('网络错误'); }
+    } catch(e) {
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
+            showNoPermission();
+            return;
+        }
+        alert('网络错误');
+    }
 };
 
 // ==================== 管理员订单管理 ====================
@@ -590,7 +615,10 @@ async function loadAdminOrders() {
             </tr>
         `).join('');
     } catch(e) {
-        if (e.message === 'Forbidden') return;
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
+            showNoPermission();
+            return;
+        }
         console.error(e);
         alert('加载订单列表失败');
     }
@@ -614,7 +642,13 @@ window.updateOrderStatus = async (orderId, newStatus) => {
             const err = await res.json();
             alert('更新失败：' + (err.detail || '未知错误'));
         }
-    } catch(e) { if (e.message !== 'Forbidden') alert('网络错误'); }
+    } catch(e) {
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
+            showNoPermission();
+            return;
+        }
+        alert('网络错误');
+    }
 };
 
 // ==================== 添加管理员功能 ====================
@@ -653,11 +687,18 @@ async function confirmAddAdmin() {
             const err = await res.json();
             alert('添加失败：' + (err.detail || '未知错误'));
         }
-    } catch(e) { if (e.message !== 'Forbidden') alert('网络错误'); }
+    } catch(e) {
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
+            showNoPermission();
+            return;
+        }
+        alert('网络错误');
+    }
 }
 
 // ==================== 加载后台数据 ====================
 async function loadAdminData() {
+    // 如果已经拒绝，直接显示无权限
     if (adminAccessDenied) {
         showNoPermission();
         return;
@@ -677,7 +718,7 @@ async function loadAdminData() {
             </tr>
         `).join('');
     } catch(e) {
-        if (e.message === 'Forbidden') {
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
             showNoPermission();
             return;
         }
@@ -699,7 +740,7 @@ async function loadAdminData() {
             </tr>
         `).join('');
     } catch(e) {
-        if (e.message === 'Forbidden') {
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
             showNoPermission();
             return;
         }
@@ -715,7 +756,13 @@ window.deleteFaq = async function(question) {
     try {
         await fetchWithAdminToken(`${API_BASE}/api/admin/faqs?question=${encodeURIComponent(question)}`, { method: 'DELETE' });
         loadAdminData();
-    } catch(e) { if (e.message !== 'Forbidden') alert("删除失败"); }
+    } catch(e) {
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
+            showNoPermission();
+            return;
+        }
+        alert("删除失败");
+    }
 };
 
 window.addFaq = async function() {
@@ -732,7 +779,13 @@ window.addFaq = async function() {
         document.getElementById('faqQ').value = '';
         document.getElementById('faqA').value = '';
         loadAdminData();
-    } catch(e) { if (e.message !== 'Forbidden') alert("添加失败"); }
+    } catch(e) {
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
+            showNoPermission();
+            return;
+        }
+        alert("添加失败");
+    }
 };
 
 // ==================== 页面切换 ====================
@@ -774,17 +827,18 @@ function switchTab(tabId) {
             return;
         }
         adminView.classList.remove('hidden');
-        // 不重置 adminAccessDenied，保留上次权限状态
-        // 如果用户已登录但非管理员，不会再次弹窗
-        // 如果用户是管理员，adminAccessDenied 为 false，可以正常请求
+        // 如果已经拒绝，直接显示无权限
+        if (adminAccessDenied) {
+            showNoPermission();
+            return;
+        }
+        // 否则显示加载并请求数据
         const tables = ['#logTable tbody', '#productTable tbody', '#adminOrderTable tbody', '#faqTable tbody'];
         tables.forEach(sel => {
             const el = document.querySelector(sel);
             if (el) el.innerHTML = '<tr><td colspan="10" style="text-align:center;">加载中...</td></tr>';
         });
-        loadAdminData().catch(err => {
-            console.error(err);
-        });
+        loadAdminData().catch(err => console.error(err));
         // 折叠按钮事件绑定
         const toggleBtn = document.getElementById('toggleLogBtn');
         if (toggleBtn && !toggleBtn._listener) {
