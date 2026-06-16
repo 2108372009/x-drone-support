@@ -1,6 +1,6 @@
 const API_BASE = '';
 
-// ==================== 全局认证状态 ====================
+// ==================== 全局状态 ====================
 let currentToken = localStorage.getItem('auth_token');
 let currentUserId = localStorage.getItem('user_id');
 let currentUsername = localStorage.getItem('username');
@@ -11,8 +11,10 @@ if (!sessionId) {
     localStorage.setItem('sessionId', sessionId);
 }
 
-// 新增：权限拒绝标记，防止重复弹窗
+// 权限拒绝标志（全局有效，避免重复弹窗）
 let adminAccessDenied = false;
+// 防止并发弹窗的锁
+let isAdminAlerting = false;
 
 // DOM 元素
 const chatBox = document.getElementById('chatBox');
@@ -29,7 +31,7 @@ const closeLoginBtn = document.getElementById('closeLoginBtn');
 const historyModal = document.getElementById('historyModal');
 const orderModal = document.getElementById('orderModal');
 
-// 辅助函数
+// ==================== 工具函数 ====================
 function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
@@ -73,7 +75,6 @@ function safeParseDate(dateStr) {
     return null;
 }
 
-// 未登录拦截
 function requireLogin() {
     if (!currentToken) {
         alert('请先注册/登录账号再进行此操作');
@@ -83,6 +84,7 @@ function requireLogin() {
     return true;
 }
 
+// ==================== 用户认证 ====================
 function updateUserUI() {
     if (currentToken && currentUserId) {
         userNameSpan.innerText = currentUsername || '用户';
@@ -102,6 +104,9 @@ function storeAuth(token, userId, username) {
     localStorage.setItem('auth_token', token);
     localStorage.setItem('user_id', userId);
     localStorage.setItem('username', username);
+    // 登录成功后重置权限标志
+    adminAccessDenied = false;
+    isAdminAlerting = false;
     updateUserUI();
 }
 
@@ -112,6 +117,8 @@ function clearAuth() {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_id');
     localStorage.removeItem('username');
+    adminAccessDenied = false;
+    isAdminAlerting = false;
     updateUserUI();
 }
 
@@ -407,8 +414,8 @@ async function handleRegister() {
     }
 }
 
-// ==================== 后台管理（优化权限提示） ====================
-// 使用全局 adminAccessDenied 控制弹窗次数
+// ==================== 后台管理（防重复弹窗） ====================
+// 带权限验证的请求，只弹一次窗
 async function fetchWithAdminToken(url, options = {}) {
     if (!currentToken) {
         alert('请先登录');
@@ -419,9 +426,10 @@ async function fetchWithAdminToken(url, options = {}) {
         'Authorization': `Bearer ${currentToken}`
     };
     const response = await fetch(url, { ...options, headers });
-    // 403 无权限，只提示一次
+    // 如果是 403 且尚未提示过，则弹出一次
     if (response.status === 403) {
-        if (!adminAccessDenied) {
+        if (!adminAccessDenied && !isAdminAlerting) {
+            isAdminAlerting = true;
             adminAccessDenied = true;
             alert('您不是管理员，无权访问后台数据');
         }
@@ -430,7 +438,7 @@ async function fetchWithAdminToken(url, options = {}) {
     return response;
 }
 
-// 显示无权限占位内容
+// 显示无权限占位
 function showNoPermission() {
     const tables = ['#logTable tbody', '#productTable tbody', '#adminOrderTable tbody', '#faqTable tbody'];
     tables.forEach(selector => {
@@ -650,7 +658,6 @@ async function confirmAddAdmin() {
 
 // ==================== 加载后台数据 ====================
 async function loadAdminData() {
-    // 如果已经无权限，直接显示占位
     if (adminAccessDenied) {
         showNoPermission();
         return;
@@ -678,7 +685,6 @@ async function loadAdminData() {
         alert("加载对话记录失败");
     }
 
-    // 如果已经无权限，不再继续
     if (adminAccessDenied) return;
 
     try {
@@ -700,7 +706,6 @@ async function loadAdminData() {
         alert("加载FAQ失败");
     }
 
-    // 加载商品和订单管理（内部已处理权限）
     await loadProductManagement();
     await loadAdminOrders();
 }
@@ -769,9 +774,9 @@ function switchTab(tabId) {
             return;
         }
         adminView.classList.remove('hidden');
-        // 重置权限标志，以便当前登录用户可重新尝试
-        adminAccessDenied = false;
-        // 显示加载占位
+        // 不重置 adminAccessDenied，保留上次权限状态
+        // 如果用户已登录但非管理员，不会再次弹窗
+        // 如果用户是管理员，adminAccessDenied 为 false，可以正常请求
         const tables = ['#logTable tbody', '#productTable tbody', '#adminOrderTable tbody', '#faqTable tbody'];
         tables.forEach(sel => {
             const el = document.querySelector(sel);
@@ -779,7 +784,6 @@ function switchTab(tabId) {
         });
         loadAdminData().catch(err => {
             console.error(err);
-            // 如果未捕获到权限错误，可能已经由内部处理
         });
         // 折叠按钮事件绑定
         const toggleBtn = document.getElementById('toggleLogBtn');
