@@ -11,9 +11,8 @@ if (!sessionId) {
     localStorage.setItem('sessionId', sessionId);
 }
 
-// 权限拒绝标志（全局有效，避免重复弹窗）
+// 权限拒绝标志
 let adminAccessDenied = false;
-// 防止并发弹窗的锁
 let isAdminAlerting = false;
 
 // DOM 元素
@@ -110,6 +109,17 @@ function clearAuth() {
     adminAccessDenied = false;
     isAdminAlerting = false;
     updateUserUI();
+}
+
+// 跳转到聊天标签（模拟点击）
+function goToChat() {
+    const chatTab = document.querySelector('.tab[data-tab="chat"]');
+    if (chatTab) {
+        chatTab.click();
+    } else {
+        // 降级方案：直接切换
+        switchTab('chat');
+    }
 }
 
 // ==================== 客服模块 ====================
@@ -404,15 +414,15 @@ async function handleRegister() {
     }
 }
 
-// ==================== 后台管理（彻底防重复弹窗） ====================
-// 带权限验证的请求，只弹一次窗（区分401和403）
+// ==================== 后台管理（权限+跳转） ====================
+// 带权限验证的请求，只弹一次窗
 async function fetchWithAdminToken(url, options = {}) {
     if (!currentToken) {
-        // 未登录，提示一次
         if (!adminAccessDenied && !isAdminAlerting) {
             isAdminAlerting = true;
             adminAccessDenied = true;
-            alert('请先登录再访问后台');
+            alert('用户权限不够无法访问');
+            goToChat();
         }
         throw new Error('NotLoggedIn');
     }
@@ -428,6 +438,7 @@ async function fetchWithAdminToken(url, options = {}) {
             alert('登录已过期，请重新登录');
             clearAuth();
             showLoginModal();
+            goToChat();
         }
         throw new Error('Unauthorized');
     }
@@ -435,14 +446,15 @@ async function fetchWithAdminToken(url, options = {}) {
         if (!adminAccessDenied && !isAdminAlerting) {
             isAdminAlerting = true;
             adminAccessDenied = true;
-            alert('您不是管理员，无权访问后台数据');
+            alert('用户权限不够无法访问');
+            goToChat();
         }
         throw new Error('Forbidden');
     }
     return response;
 }
 
-// 显示无权限占位
+// 显示无权限占位（用于已登录但非管理员的情况，此版本已改为跳转，此函数可保留但不使用）
 function showNoPermission() {
     const tables = ['#logTable tbody', '#productTable tbody', '#adminOrderTable tbody', '#faqTable tbody'];
     tables.forEach(selector => {
@@ -478,7 +490,7 @@ async function loadProductManagement() {
         `).join('');
     } catch(e) {
         if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
-            showNoPermission();
+            // 已由 fetchWithAdminToken 处理跳转
             return;
         }
         console.error(e);
@@ -506,10 +518,7 @@ window.adjustStock = async (productId, delta) => {
             alert('调整失败：' + (err.detail || '未知错误'));
         }
     } catch(e) {
-        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
-            showNoPermission();
-            return;
-        }
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') return;
         alert('网络错误');
     }
 };
@@ -555,10 +564,7 @@ window.addNewProduct = async () => {
             alert('上架失败：' + (err.detail || '未知错误'));
         }
     } catch(e) {
-        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
-            showNoPermission();
-            return;
-        }
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') return;
         alert('网络错误');
     }
 };
@@ -577,10 +583,7 @@ window.deleteProduct = async (productId) => {
             alert('删除失败：' + (err.detail || '未知错误'));
         }
     } catch(e) {
-        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
-            showNoPermission();
-            return;
-        }
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') return;
         alert('网络错误');
     }
 };
@@ -615,10 +618,7 @@ async function loadAdminOrders() {
             </tr>
         `).join('');
     } catch(e) {
-        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
-            showNoPermission();
-            return;
-        }
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') return;
         console.error(e);
         alert('加载订单列表失败');
     }
@@ -643,10 +643,7 @@ window.updateOrderStatus = async (orderId, newStatus) => {
             alert('更新失败：' + (err.detail || '未知错误'));
         }
     } catch(e) {
-        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
-            showNoPermission();
-            return;
-        }
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') return;
         alert('网络错误');
     }
 };
@@ -654,7 +651,8 @@ window.updateOrderStatus = async (orderId, newStatus) => {
 // ==================== 添加管理员功能 ====================
 function showAddAdminModal() {
     if (adminAccessDenied) {
-        alert('您不是管理员，无权操作');
+        alert('用户权限不够无法访问');
+        goToChat();
         return;
     }
     document.getElementById('addAdminModal').style.display = 'flex';
@@ -688,19 +686,15 @@ async function confirmAddAdmin() {
             alert('添加失败：' + (err.detail || '未知错误'));
         }
     } catch(e) {
-        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
-            showNoPermission();
-            return;
-        }
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') return;
         alert('网络错误');
     }
 }
 
 // ==================== 加载后台数据 ====================
 async function loadAdminData() {
-    // 如果已经拒绝，直接显示无权限
     if (adminAccessDenied) {
-        showNoPermission();
+        goToChat();
         return;
     }
 
@@ -719,7 +713,7 @@ async function loadAdminData() {
         `).join('');
     } catch(e) {
         if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
-            showNoPermission();
+            // 已由 fetchWithAdminToken 处理
             return;
         }
         console.error(e);
@@ -740,10 +734,7 @@ async function loadAdminData() {
             </tr>
         `).join('');
     } catch(e) {
-        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
-            showNoPermission();
-            return;
-        }
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') return;
         alert("加载FAQ失败");
     }
 
@@ -757,10 +748,7 @@ window.deleteFaq = async function(question) {
         await fetchWithAdminToken(`${API_BASE}/api/admin/faqs?question=${encodeURIComponent(question)}`, { method: 'DELETE' });
         loadAdminData();
     } catch(e) {
-        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
-            showNoPermission();
-            return;
-        }
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') return;
         alert("删除失败");
     }
 };
@@ -780,10 +768,7 @@ window.addFaq = async function() {
         document.getElementById('faqA').value = '';
         loadAdminData();
     } catch(e) {
-        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') {
-            showNoPermission();
-            return;
-        }
+        if (e.message === 'Forbidden' || e.message === 'Unauthorized' || e.message === 'NotLoggedIn') return;
         alert("添加失败");
     }
 };
@@ -826,13 +811,14 @@ function switchTab(tabId) {
             switchTab('chat');
             return;
         }
-        adminView.classList.remove('hidden');
-        // 如果已经拒绝，直接显示无权限
+        // 检查是否已被拒绝
         if (adminAccessDenied) {
-            showNoPermission();
+            alert('用户权限不够无法访问');
+            goToChat();
             return;
         }
-        // 否则显示加载并请求数据
+        adminView.classList.remove('hidden');
+        // 显示加载占位
         const tables = ['#logTable tbody', '#productTable tbody', '#adminOrderTable tbody', '#faqTable tbody'];
         tables.forEach(sel => {
             const el = document.querySelector(sel);
