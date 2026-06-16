@@ -11,6 +11,9 @@ if (!sessionId) {
     localStorage.setItem('sessionId', sessionId);
 }
 
+// 新增：权限拒绝标记，防止重复弹窗
+let adminAccessDenied = false;
+
 // DOM 元素
 const chatBox = document.getElementById('chatBox');
 const userInput = document.getElementById('userInput');
@@ -41,7 +44,6 @@ function getCurrentTime() {
 
 function formatLocalTime(utcString) {
     if (!utcString) return '';
-    // 如果已经是格式化好的，直接返回
     if (utcString.includes('-') && utcString.includes(':')) {
         return utcString;
     }
@@ -303,7 +305,6 @@ async function loadOrders() {
         const container = document.getElementById('ordersList');
         if (!orders.length) { container.innerHTML = '<p>暂无订单</p>'; return; }
         container.innerHTML = orders.map(o => {
-            // 直接使用后端返回的时间字符串
             const dateStr = o.created_at || '时间未知';
             return `
                 <div class="order-item">
@@ -406,8 +407,8 @@ async function handleRegister() {
     }
 }
 
-// ==================== 后台管理（修改验证方式） ====================
-// 移除 getAdminToken / setAdminToken，直接使用当前用户的 Bearer token
+// ==================== 后台管理（优化权限提示） ====================
+// 使用全局 adminAccessDenied 控制弹窗次数
 async function fetchWithAdminToken(url, options = {}) {
     if (!currentToken) {
         alert('请先登录');
@@ -417,20 +418,31 @@ async function fetchWithAdminToken(url, options = {}) {
         ...options.headers,
         'Authorization': `Bearer ${currentToken}`
     };
-    return fetch(url, { ...options, headers });
+    const response = await fetch(url, { ...options, headers });
+    // 403 无权限，只提示一次
+    if (response.status === 403) {
+        if (!adminAccessDenied) {
+            adminAccessDenied = true;
+            alert('您不是管理员，无权访问后台数据');
+        }
+        throw new Error('Forbidden');
+    }
+    return response;
 }
 
-// ---- 加载商品管理（不变） ----
+// 显示无权限占位内容
+function showNoPermission() {
+    const tables = ['#logTable tbody', '#productTable tbody', '#adminOrderTable tbody', '#faqTable tbody'];
+    tables.forEach(selector => {
+        const el = document.querySelector(selector);
+        if (el) el.innerHTML = `<tr><td colspan="10" style="text-align:center; color:#999;">无权限查看，请联系管理员</td></tr>`;
+    });
+}
+
 async function loadProductManagement() {
+    if (adminAccessDenied) return;
     try {
         const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products`);
-        if (!res.ok) {
-            if (res.status === 403) {
-                alert('您不是管理员，无权访问');
-                return;
-            }
-            throw new Error(`HTTP ${res.status}`);
-        }
         const products = await res.json();
         const tbody = document.querySelector('#productTable tbody');
         if (!tbody) return;
@@ -453,12 +465,14 @@ async function loadProductManagement() {
             </tr>
         `).join('');
     } catch(e) {
+        if (e.message === 'Forbidden') return;
         console.error(e);
         alert('加载商品列表失败');
     }
 }
 
 window.adjustStock = async (productId, delta) => {
+    if (adminAccessDenied) return;
     try {
         const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products/${productId}/stock`, {
             method: 'PATCH',
@@ -476,10 +490,11 @@ window.adjustStock = async (productId, delta) => {
             const err = await res.json();
             alert('调整失败：' + (err.detail || '未知错误'));
         }
-    } catch(e) { alert('网络错误'); }
+    } catch(e) { if (e.message !== 'Forbidden') alert('网络错误'); }
 };
 
 window.addNewProduct = async () => {
+    if (adminAccessDenied) return;
     const name = document.getElementById('newProdName').value.trim();
     const description = document.getElementById('newProdDesc').value.trim();
     const priceDisplay = document.getElementById('newProdPrice').value.trim();
@@ -518,10 +533,11 @@ window.addNewProduct = async () => {
             const err = await res.json();
             alert('上架失败：' + (err.detail || '未知错误'));
         }
-    } catch(e) { alert('网络错误'); }
+    } catch(e) { if (e.message !== 'Forbidden') alert('网络错误'); }
 };
 
 window.deleteProduct = async (productId) => {
+    if (adminAccessDenied) return;
     if (!confirm('确定要下架并删除此商品吗？删除后不可恢复。')) return;
     try {
         const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products/${productId}`, { method: 'DELETE' });
@@ -533,20 +549,14 @@ window.deleteProduct = async (productId) => {
             const err = await res.json();
             alert('删除失败：' + (err.detail || '未知错误'));
         }
-    } catch(e) { alert('网络错误'); }
+    } catch(e) { if (e.message !== 'Forbidden') alert('网络错误'); }
 };
 
 // ==================== 管理员订单管理 ====================
 async function loadAdminOrders() {
+    if (adminAccessDenied) return;
     try {
         const res = await fetchWithAdminToken(`${API_BASE}/api/admin/orders`);
-        if (!res.ok) {
-            if (res.status === 403) {
-                alert('您不是管理员，无权查看订单');
-                return;
-            }
-            throw new Error('加载订单失败');
-        }
         const orders = await res.json();
         const tbody = document.querySelector('#adminOrderTable tbody');
         if (!tbody) return;
@@ -572,12 +582,14 @@ async function loadAdminOrders() {
             </tr>
         `).join('');
     } catch(e) {
+        if (e.message === 'Forbidden') return;
         console.error(e);
         alert('加载订单列表失败');
     }
 }
 
 window.updateOrderStatus = async (orderId, newStatus) => {
+    if (adminAccessDenied) return;
     try {
         const res = await fetchWithAdminToken(`${API_BASE}/api/admin/orders/${orderId}/status`, {
             method: 'PATCH',
@@ -594,13 +606,15 @@ window.updateOrderStatus = async (orderId, newStatus) => {
             const err = await res.json();
             alert('更新失败：' + (err.detail || '未知错误'));
         }
-    } catch(e) {
-        alert('网络错误');
-    }
+    } catch(e) { if (e.message !== 'Forbidden') alert('网络错误'); }
 };
 
 // ==================== 添加管理员功能 ====================
 function showAddAdminModal() {
+    if (adminAccessDenied) {
+        alert('您不是管理员，无权操作');
+        return;
+    }
     document.getElementById('addAdminModal').style.display = 'flex';
     document.getElementById('newAdminName').value = '';
     document.getElementById('newAdminPwd1').value = '';
@@ -611,6 +625,7 @@ function closeAddAdminModal() {
 }
 
 async function confirmAddAdmin() {
+    if (adminAccessDenied) return;
     const username = document.getElementById('newAdminName').value.trim();
     const pwd1 = document.getElementById('newAdminPwd1').value;
     const pwd2 = document.getElementById('newAdminPwd2').value;
@@ -626,27 +641,23 @@ async function confirmAddAdmin() {
         if (res.ok) {
             alert('系统已成功添加管理员');
             closeAddAdminModal();
-            // 可刷新管理员列表（如有需要）
         } else {
             const err = await res.json();
             alert('添加失败：' + (err.detail || '未知错误'));
         }
-    } catch(e) {
-        alert('网络错误');
-    }
+    } catch(e) { if (e.message !== 'Forbidden') alert('网络错误'); }
 }
 
 // ==================== 加载后台数据 ====================
 async function loadAdminData() {
+    // 如果已经无权限，直接显示占位
+    if (adminAccessDenied) {
+        showNoPermission();
+        return;
+    }
+
     try {
         const logsResp = await fetchWithAdminToken(`${API_BASE}/api/admin/conversations`);
-        if (!logsResp.ok) {
-            if (logsResp.status === 403) {
-                alert('您不是管理员，无权查看后台');
-                return;
-            }
-            throw new Error('加载对话记录失败');
-        }
         const logs = await logsResp.json();
         const tbody = document.querySelector('#logTable tbody');
         tbody.innerHTML = logs.map(l => `
@@ -658,7 +669,18 @@ async function loadAdminData() {
                 <td>${escapeHtml(l.ai_reply)}</td>
             </tr>
         `).join('');
-    } catch(e) { console.error(e); alert("加载对话记录失败"); }
+    } catch(e) {
+        if (e.message === 'Forbidden') {
+            showNoPermission();
+            return;
+        }
+        console.error(e);
+        alert("加载对话记录失败");
+    }
+
+    // 如果已经无权限，不再继续
+    if (adminAccessDenied) return;
+
     try {
         const faqsResp = await fetchWithAdminToken(`${API_BASE}/api/admin/faqs`);
         const faqs = await faqsResp.json();
@@ -670,19 +692,29 @@ async function loadAdminData() {
                 <td><button class="delete-btn" onclick="deleteFaq('${f.question.replace(/'/g, "\\'")}')">删除</button></td>
             </tr>
         `).join('');
-    } catch(e) { alert("加载FAQ失败"); }
+    } catch(e) {
+        if (e.message === 'Forbidden') {
+            showNoPermission();
+            return;
+        }
+        alert("加载FAQ失败");
+    }
+
+    // 加载商品和订单管理（内部已处理权限）
     await loadProductManagement();
     await loadAdminOrders();
 }
 
 window.deleteFaq = async function(question) {
+    if (adminAccessDenied) return;
     try {
         await fetchWithAdminToken(`${API_BASE}/api/admin/faqs?question=${encodeURIComponent(question)}`, { method: 'DELETE' });
         loadAdminData();
-    } catch(e) { alert("删除失败"); }
+    } catch(e) { if (e.message !== 'Forbidden') alert("删除失败"); }
 };
 
 window.addFaq = async function() {
+    if (adminAccessDenied) return;
     const q = document.getElementById('faqQ').value.trim();
     const a = document.getElementById('faqA').value.trim();
     if (!q || !a) return;
@@ -695,7 +727,7 @@ window.addFaq = async function() {
         document.getElementById('faqQ').value = '';
         document.getElementById('faqA').value = '';
         loadAdminData();
-    } catch(e) { alert("添加失败"); }
+    } catch(e) { if (e.message !== 'Forbidden') alert("添加失败"); }
 };
 
 // ==================== 页面切换 ====================
@@ -737,11 +769,17 @@ function switchTab(tabId) {
             return;
         }
         adminView.classList.remove('hidden');
-        const productTbody = document.querySelector('#productTable tbody');
-        if (productTbody) productTbody.innerHTML = '<tr><td colspan="5">加载中...</td></tr>';
+        // 重置权限标志，以便当前登录用户可重新尝试
+        adminAccessDenied = false;
+        // 显示加载占位
+        const tables = ['#logTable tbody', '#productTable tbody', '#adminOrderTable tbody', '#faqTable tbody'];
+        tables.forEach(sel => {
+            const el = document.querySelector(sel);
+            if (el) el.innerHTML = '<tr><td colspan="10" style="text-align:center;">加载中...</td></tr>';
+        });
         loadAdminData().catch(err => {
             console.error(err);
-            alert('加载后台数据失败，请检查权限');
+            // 如果未捕获到权限错误，可能已经由内部处理
         });
         // 折叠按钮事件绑定
         const toggleBtn = document.getElementById('toggleLogBtn');
