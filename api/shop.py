@@ -7,6 +7,7 @@ from .db import Product, Order, User
 from .auth import SECRET_KEY, ALGORITHM
 import jwt
 from datetime import datetime
+from zoneinfo import ZoneInfo   # Python 3.9+ 内置
 
 router = APIRouter(prefix="/shop", tags=["shop"])
 
@@ -63,6 +64,7 @@ def purchase(req: PurchaseRequest, user: User = Depends(get_current_user), db: S
         total_price=total_str,
         total_value=total_val,
         status="待发货"
+        # created_at 由数据库默认值自动填充（UTC 时间）
     )
     db.add(new_order)
     db.commit()
@@ -76,12 +78,15 @@ def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_
     ).order_by(Order.created_at.desc()).all()
     result = []
     for o in orders:
-        # 格式化时间
         if o.created_at:
-            if isinstance(o.created_at, datetime):
-                created_at_str = o.created_at.strftime("%Y-%m-%d %H:%M:%S")
+            # 如果 created_at 是 naive（无时区），假设为 UTC
+            if o.created_at.tzinfo is None:
+                utc_dt = o.created_at.replace(tzinfo=ZoneInfo("UTC"))
             else:
-                created_at_str = str(o.created_at)
+                utc_dt = o.created_at
+            # 转换为北京时间
+            beijing_dt = utc_dt.astimezone(ZoneInfo("Asia/Shanghai"))
+            created_at_str = beijing_dt.strftime("%Y-%m-%d %H:%M:%S")
         else:
             created_at_str = ""
         result.append({
@@ -89,7 +94,7 @@ def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_
             "product_name": o.product_name,
             "quantity": o.quantity,
             "total_price": o.total_price,
-            "created_at": created_at_str,   # 直接返回格式化字符串
+            "created_at": created_at_str,
             "status": o.status
         })
     return result
