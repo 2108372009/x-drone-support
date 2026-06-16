@@ -43,5 +43,5 @@ class Order(Base):
     quantity = Column(Integer, default=1)
     total_price = Column(String)
     total_value = Column(Integer)
-    status = Column(String, default="active")
+    status = Column(String, default="待发货")          # 修改点：默认状态改为“待发货”
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

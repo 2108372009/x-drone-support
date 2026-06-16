@@ -61,7 +61,7 @@ def purchase(req: PurchaseRequest, user: User = Depends(get_current_user), db: S
         quantity=req.quantity,
         total_price=total_str,
         total_value=total_val,
-        status="active"
+        status="待发货"          # 修改点：明确设置状态
     )
     db.add(new_order)
     db.commit()
@@ -69,8 +69,10 @@ def purchase(req: PurchaseRequest, user: User = Depends(get_current_user), db: S
 
 @router.get("/orders")
 def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    orders = db.query(Order).filter(Order.user_id == user.id, Order.status == "active").order_by(
-        Order.created_at.desc()).all()
+    orders = db.query(Order).filter(
+        Order.user_id == user.id,
+        Order.status != "已取消"      # 修改点：只显示未取消的订单
+    ).order_by(Order.created_at.desc()).all()
     result = []
     for o in orders:
         if o.created_at:
@@ -90,7 +92,8 @@ def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_
             "product_name": o.product_name,
             "quantity": o.quantity,
             "total_price": o.total_price,
-            "created_at": created_at_str
+            "created_at": created_at_str,
+            "status": o.status          # 修改点：返回状态
         })
     return result
 
@@ -99,11 +102,11 @@ def cancel_order(order_id: str, user: User = Depends(get_current_user), db: Sess
     order = db.query(Order).filter(Order.id == order_id, Order.user_id == user.id).first()
     if not order:
         raise HTTPException(status_code=404, detail="订单不存在")
-    if order.status != "active":
+    if order.status == "已取消":
         raise HTTPException(status_code=400, detail="订单已取消")
     product = db.query(Product).filter(Product.id == order.product_id).first()
     if product:
         product.stock += order.quantity
-    order.status = "cancelled"
+    order.status = "已取消"            # 修改点：改为中文状态
     db.commit()
     return {"message": "订单已取消，库存已恢复"}

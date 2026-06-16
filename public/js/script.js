@@ -305,8 +305,9 @@ async function loadOrders() {
                 <div class="order-item">
                     <div><strong>${escapeHtml(o.product_name)}</strong> × ${o.quantity}</div>
                     <div>总价 ${o.total_price}</div>
+                    <div>状态：<span class="order-status ${o.status}">${escapeHtml(o.status)}</span></div>
                     <div>${dateStr}</div>
-                    <button onclick="cancelOrder('${o.id}')">取消订单</button>
+                    ${o.status !== '已取消' ? `<button onclick="cancelOrder('${o.id}')">取消订单</button>` : ''}
                 </div>
             `;
         }).join('');
@@ -530,6 +531,65 @@ window.deleteProduct = async (productId) => {
     } catch(e) { alert('网络错误'); }
 };
 
+// ==================== 新增：管理员订单管理 ====================
+async function loadAdminOrders() {
+    try {
+        const res = await fetchWithAdminToken(`${API_BASE}/api/admin/orders`);
+        if (!res.ok) throw new Error('加载订单失败');
+        const orders = await res.json();
+        const tbody = document.querySelector('#adminOrderTable tbody');
+        if (!tbody) return;
+        if (!orders.length) {
+            tbody.innerHTML = '<tr><td colspan="7">暂无订单</td></tr>';
+            return;
+        }
+        tbody.innerHTML = orders.map(o => `
+            <tr>
+                <td>${escapeHtml(o.order_id)}</td>
+                <td>${escapeHtml(o.username)}</td>
+                <td>${escapeHtml(o.product_name)}</td>
+                <td>${o.quantity}</td>
+                <td>${o.total_price}</td>
+                <td><span class="order-status ${o.status}">${o.status}</span></td>
+                <td>
+                    <select onchange="updateOrderStatus('${o.order_id}', this.value)">
+                        <option value="待发货" ${o.status==='待发货'?'selected':''}>待发货</option>
+                        <option value="运输中" ${o.status==='运输中'?'selected':''}>运输中</option>
+                        <option value="已送达" ${o.status==='已送达'?'selected':''}>已送达</option>
+                    </select>
+                </td>
+            </tr>
+        `).join('');
+    } catch(e) {
+        console.error(e);
+        alert('加载订单列表失败');
+    }
+}
+
+window.updateOrderStatus = async (orderId, newStatus) => {
+    try {
+        const res = await fetchWithAdminToken(`${API_BASE}/api/admin/orders/${orderId}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus })
+        });
+        if (res.ok) {
+            alert('状态更新成功');
+            loadAdminOrders();  // 刷新表格
+            // 如果当前在“我的订单”页面，也刷新（可选）
+            if (document.querySelector('.tab.active')?.getAttribute('data-tab') === 'orders') {
+                loadOrders();
+            }
+        } else {
+            const err = await res.json();
+            alert('更新失败：' + (err.detail || '未知错误'));
+        }
+    } catch(e) {
+        alert('网络错误');
+    }
+};
+
+// ==================== 加载后台数据 ====================
 async function loadAdminData() {
     try {
         const logsResp = await fetchWithAdminToken(`${API_BASE}/api/admin/conversations`);
@@ -558,6 +618,7 @@ async function loadAdminData() {
         `).join('');
     } catch(e) { alert("加载FAQ失败"); }
     await loadProductManagement();
+    await loadAdminOrders();        // 新增：加载订单管理
 }
 
 window.deleteFaq = async function(question) {
@@ -628,6 +689,18 @@ function switchTab(tabId) {
             console.error(err);
             alert('加载后台数据失败，请检查管理员密码或网络');
         });
+        // 折叠按钮事件绑定（只绑定一次）
+        const toggleBtn = document.getElementById('toggleLogBtn');
+        if (toggleBtn && !toggleBtn._listener) {
+            toggleBtn._listener = true;
+            toggleBtn.addEventListener('click', function() {
+                const container = document.getElementById('logContainer');
+                const arrow = document.getElementById('logArrow');
+                container.classList.toggle('hidden');
+                arrow.classList.toggle('fa-chevron-down');
+                arrow.classList.toggle('fa-chevron-right');
+            });
+        }
     }
 }
 

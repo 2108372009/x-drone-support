@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
 from .database import get_db
-from .db import FAQ, Conversation, User, Product
+from .db import FAQ, Conversation, User, Product, Order
 
 router = APIRouter()
 
@@ -25,6 +25,9 @@ class ProductCreate(BaseModel):
 
 class StockUpdate(BaseModel):
     delta: int
+
+class OrderStatusUpdate(BaseModel):          # 新增：订单状态更新模型
+    status: str   # 待发货、运输中、已送达
 
 def verify_admin(x_admin_token: str = Header(...)):
     if x_admin_token != ADMIN_SECRET:
@@ -117,3 +120,32 @@ async def delete_product(product_id: str, _: bool = Depends(verify_admin), db: S
     db.delete(product)
     db.commit()
     return {"message": "商品已下架删除"}
+
+# ==================== 新增：订单管理接口 ====================
+@router.get("/admin/orders")
+async def get_all_orders(_: bool = Depends(verify_admin), db: Session = Depends(get_db)):
+    orders = db.query(Order, User.username).join(User, Order.user_id == User.id).order_by(Order.created_at.desc()).limit(100).all()
+    result = []
+    for order, username in orders:
+        result.append({
+            "order_id": order.id,
+            "username": username,
+            "product_name": order.product_name,
+            "quantity": order.quantity,
+            "total_price": order.total_price,
+            "status": order.status,
+            "created_at": order.created_at.isoformat() if order.created_at else None
+        })
+    return result
+
+@router.patch("/admin/orders/{order_id}/status")
+async def update_order_status(order_id: str, update: OrderStatusUpdate, _: bool = Depends(verify_admin), db: Session = Depends(get_db)):
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    valid_statuses = ["待发货", "运输中", "已送达"]
+    if update.status not in valid_statuses:
+        raise HTTPException(status_code=400, detail="无效的状态值")
+    order.status = update.status
+    db.commit()
+    return {"message": "状态更新成功", "new_status": order.status}
