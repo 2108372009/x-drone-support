@@ -2,6 +2,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 import uuid
@@ -24,7 +25,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
-        # ===== 商品数据初始化 =====
+        # ===== 商品数据初始化（仅在表为空时） =====
         if db.query(Product).count() == 0:
             items = [
                 Product(id="prod_pro", name="X-Drone Pro 专业旗舰版", description="1英寸传感器，45分钟续航，全向避障", price="¥8,999", price_value=899900, stock=10),
@@ -54,10 +55,11 @@ async def lifespan(app: FastAPI):
         else:
             print("✅ 管理员已存在，跳过创建")
 
-        # ===== 迁移旧订单状态（如果使用Supabase手动执行过，可忽略） =====
+        # ===== 迁移旧订单状态 =====
         try:
-            db.execute("UPDATE orders SET status = '待发货' WHERE status = 'active'")
-            db.execute("UPDATE orders SET status = '已取消' WHERE status = 'cancelled'")
+            from sqlalchemy import text
+            db.execute(text("UPDATE orders SET status = '待发货' WHERE status = 'active'"))
+            db.execute(text("UPDATE orders SET status = '已取消' WHERE status = 'cancelled'"))
             db.commit()
             print("✅ 订单状态迁移完成")
         except Exception as e:
@@ -81,6 +83,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 健康检查端点（Railway 需要）
+@app.get("/health")
+async def health_check():
+    return JSONResponse(content={"status": "ok", "service": "x-drone-support"})
 
 app.include_router(chat_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")

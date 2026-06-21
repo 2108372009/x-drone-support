@@ -45,7 +45,7 @@ function getCurrentTime() {
 
 function formatLocalTime(utcString) {
     if (!utcString) return '';
-    if (utcString.includes('-') && utcString.includes(':')) {
+    if (utcString.includes('-') && utcString.includes(':') && !utcString.includes('T')) {
         return utcString;
     }
     let date;
@@ -66,7 +66,7 @@ function formatLocalTime(utcString) {
 
 function requireLogin() {
     if (!currentToken) {
-        alert('请先注册/登录账号再进行此操作');
+        showToast('请先注册/登录账号再进行此操作', 'warning');
         showLoginModal();
         return false;
     }
@@ -143,8 +143,16 @@ function addMessage(role, text, isUser = false) {
     if (!isUser) {
         const thumbsUp = messageDiv.querySelector('.fa-thumbs-up');
         const thumbsDown = messageDiv.querySelector('.fa-thumbs-down');
-        if (thumbsUp) thumbsUp.addEventListener('click', () => alert('感谢您的认可！'));
-        if (thumbsDown) thumbsDown.addEventListener('click', () => alert('很抱歉没能帮到您，我们会努力改进。'));
+        if (thumbsUp) thumbsUp.addEventListener('click', function() {
+            this.classList.add('active');
+            this.style.color = '#10b981';
+            alert('感谢您的认可！');
+        });
+        if (thumbsDown) thumbsDown.addEventListener('click', function() {
+            this.classList.add('active');
+            this.style.color = '#ef4444';
+            alert('很抱歉没能帮到您，我们会努力改进。');
+        });
     }
 }
 
@@ -154,7 +162,7 @@ function showTypingIndicator() {
     const div = document.createElement('div');
     div.className = 'message ai';
     div.id = 'typing-indicator';
-    div.innerHTML = `<div class="avatar"><i class="fas fa-robot"></i></div><div class="bubble">正在输入...</div>`;
+    div.innerHTML = `<div class="avatar"><i class="fas fa-robot"></i></div><div class="bubble"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>`;
     chatBox.appendChild(div);
     chatBox.scrollTop = chatBox.scrollHeight;
 }
@@ -162,6 +170,21 @@ function showTypingIndicator() {
 function removeTypingIndicator() {
     const el = document.getElementById('typing-indicator');
     if (el) el.remove();
+}
+
+// Toast通知函数
+function showToast(message, type = 'error', duration = 3000) {
+    const existing = document.querySelector('.error-toast');
+    if (existing) existing.remove();
+    const toast = document.createElement('div');
+    toast.className = `error-toast ${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s';
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
 }
 
 async function sendMessage() {
@@ -194,7 +217,7 @@ async function sendMessage() {
         addMessage('ai', reply, false);
     } catch (err) {
         removeTypingIndicator();
-        addMessage('ai', '网络错误，请稍后再试。', false);
+        addMessage('ai', '网络错误，请检查网络连接后重试。', false);
     }
 }
 
@@ -221,7 +244,7 @@ async function showHistoryModal() {
         });
         if (!res.ok) {
             if (res.status === 401) {
-                alert('登录已过期，请重新登录');
+                showToast('登录已过期，请重新登录', 'warning');
                 clearAuth();
                 showLoginModal();
                 historyModal.style.display = 'none';
@@ -288,14 +311,14 @@ async function buyProduct(productId) {
             body: JSON.stringify({ product_id: productId, quantity })
         });
         if (res.ok) {
-            alert('购买成功！');
+            showToast('购买成功！', 'success');
             loadProducts();
             if (document.querySelector('.tab.active')?.getAttribute('data-tab') === 'orders') loadOrders();
         } else {
             const err = await res.json();
-            alert('购买失败：' + (err.detail || '未知错误'));
+            showToast('购买失败：' + (err.detail || '未知错误'), 'error');
         }
-    } catch(e) { alert('网络错误'); }
+    } catch(e) { showToast('网络错误，请检查网络连接', 'error'); }
 }
 
 // ==================== 订单模块 ====================
@@ -331,11 +354,11 @@ window.cancelOrder = async (orderId) => {
     try {
         const res = await fetch(`${API_BASE}/api/shop/orders/${orderId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${currentToken}` } });
         if (res.ok) {
-            alert('订单已取消');
+            showToast('订单已取消', 'success');
             loadOrders();
             loadProducts();
-        } else alert('取消失败');
-    } catch(e) { alert('网络错误'); }
+        } else showToast('取消失败', 'error');
+    } catch(e) { showToast('网络错误', 'error'); }
 };
 
 // ==================== 登录/注册 ====================
@@ -350,7 +373,7 @@ function closeLoginModal() { loginModal.style.display = 'none'; }
 async function handleLogin() {
     const username = document.getElementById('loginUsername').value.trim();
     const password = document.getElementById('loginPassword').value;
-    if (!username || !password) { alert('请输入用户名和密码'); return; }
+    if (!username || !password) { showToast('请输入用户名和密码', 'warning'); return; }
     try {
         const res = await fetch(`${API_BASE}/api/auth/login`, {
             method: 'POST',
@@ -365,9 +388,9 @@ async function handleLogin() {
             if (document.querySelector('.tab.active')?.getAttribute('data-tab') === 'orders') loadOrders();
         } else {
             const err = await res.json();
-            alert('登录失败：' + (err.detail || '用户名或密码错误'));
+            showToast('登录失败：' + (err.detail || '用户名或密码错误'), 'error');
         }
-    } catch(e) { alert('网络错误'); }
+    } catch(e) { showToast('网络错误，请检查网络连接', 'error'); }
 }
 
 async function handleRegister() {
@@ -376,18 +399,18 @@ async function handleRegister() {
     const confirm = document.getElementById('regConfirmPassword').value;
 
     if (!username || !password) {
-        alert('请填写完整信息');
+        showToast('请填写完整信息', 'warning');
         return;
     }
     if (password !== confirm) {
-        alert('两次输入的密码不一致');
+        showToast('两次输入的密码不一致', 'warning');
         return;
     }
 
     const hasLetter = /[a-zA-Z]/.test(password);
     const hasNumber = /\d/.test(password);
     if (!hasLetter || !hasNumber || password.length < 6) {
-        alert('密码必须同时包含字母和数字，且长度至少6位（例如：abc123）');
+        showToast('密码必须同时包含字母和数字，且长度至少6位', 'warning');
         return;
     }
 
@@ -403,13 +426,13 @@ async function handleRegister() {
             closeLoginModal();
             loadProducts();
             if (document.querySelector('.tab.active')?.getAttribute('data-tab') === 'orders') loadOrders();
-            alert('注册成功！');
+            showToast('注册成功！', 'success');
         } else {
             const err = await res.json();
-            alert('注册失败：' + (err.detail || '请重试'));
+            showToast('注册失败：' + (err.detail || '请重试'), 'error');
         }
     } catch(e) {
-        alert('网络错误，请稍后再试');
+        showToast('网络错误，请稍后重试', 'error');
     }
 }
 
@@ -421,7 +444,7 @@ async function fetchWithAdminToken(url, options = {}) {
         if (!adminAccessDenied && !isAdminAlerting) {
             isAdminAlerting = true;
             adminAccessDenied = true;
-            alert('请先登录再访问后台');
+            showToast('请先登录再访问后台', 'warning');
             showLoginModal();
             goToChat();
         }
@@ -439,7 +462,7 @@ async function fetchWithAdminToken(url, options = {}) {
         if (!adminAccessDenied && !isAdminAlerting) {
             isAdminAlerting = true;
             adminAccessDenied = true;
-            alert('用户权限不够无法访问');
+            showToast('用户权限不够无法访问', 'error');
             goToChat();
         }
         throw new Error('Forbidden');
@@ -464,7 +487,7 @@ async function loadProductManagement() {
         const tbody = document.querySelector('#productTable tbody');
         if (!tbody) return;
         if (products.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5">暂无商品，请点击“上架新产品”添加</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5">暂无商品，请点击"上架新产品"添加</td></tr>';
             return;
         }
         tbody.innerHTML = products.map(p => `
@@ -487,7 +510,7 @@ async function loadProductManagement() {
             return;
         }
         console.error(e);
-        alert('加载商品列表失败');
+        showToast('加载商品列表失败', 'error');
     }
 }
 
@@ -508,11 +531,11 @@ window.adjustStock = async (productId, delta) => {
             loadProducts();
         } else {
             const err = await res.json();
-            alert('调整失败：' + (err.detail || '未知错误'));
+            showToast('调整失败：' + (err.detail || '未知错误'), 'error');
         }
     } catch(e) {
         if (e.message === 'Forbidden' || e.message === 'NotLoggedIn') return;
-        alert('网络错误');
+        showToast('网络错误', 'error');
     }
 };
 
@@ -526,11 +549,11 @@ window.addNewProduct = async () => {
     let imageUrl = document.getElementById('newProdImage').value.trim();
 
     if (!name || !description || !priceDisplay || isNaN(priceYuan) || isNaN(stock)) {
-        alert('请完整填写商品信息（名称、描述、显示价格、价格(元)、库存）');
+        showToast('请完整填写商品信息（名称、描述、显示价格、价格(元)、库存）', 'warning');
         return;
     }
     if (priceYuan <= 0) {
-        alert('价格必须大于0');
+        showToast('价格必须大于0', 'warning');
         return;
     }
     const priceValue = Math.round(priceYuan * 100);
@@ -543,7 +566,7 @@ window.addNewProduct = async () => {
             body: JSON.stringify({ name, description, price: priceDisplay, price_value: priceValue, stock, image_url: imageUrl })
         });
         if (res.ok) {
-            alert('新产品上架成功');
+            showToast('新产品上架成功', 'success');
             document.getElementById('newProdName').value = '';
             document.getElementById('newProdDesc').value = '';
             document.getElementById('newProdPrice').value = '';
@@ -554,11 +577,11 @@ window.addNewProduct = async () => {
             loadProducts();
         } else {
             const err = await res.json();
-            alert('上架失败：' + (err.detail || '未知错误'));
+            showToast('上架失败：' + (err.detail || '未知错误'), 'error');
         }
     } catch(e) {
         if (e.message === 'Forbidden' || e.message === 'NotLoggedIn') return;
-        alert('网络错误');
+        showToast('网络错误', 'error');
     }
 };
 
@@ -568,16 +591,16 @@ window.deleteProduct = async (productId) => {
     try {
         const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products/${productId}`, { method: 'DELETE' });
         if (res.ok) {
-            alert('商品已下架删除');
+            showToast('商品已下架删除', 'success');
             loadProductManagement();
             loadProducts();
         } else {
             const err = await res.json();
-            alert('删除失败：' + (err.detail || '未知错误'));
+            showToast('删除失败：' + (err.detail || '未知错误'), 'error');
         }
     } catch(e) {
         if (e.message === 'Forbidden' || e.message === 'NotLoggedIn') return;
-        alert('网络错误');
+        showToast('网络错误', 'error');
     }
 };
 
@@ -613,7 +636,7 @@ async function loadAdminOrders() {
     } catch(e) {
         if (e.message === 'Forbidden' || e.message === 'NotLoggedIn') return;
         console.error(e);
-        alert('加载订单列表失败');
+        showToast('加载订单列表失败', 'error');
     }
 }
 
@@ -626,25 +649,25 @@ window.updateOrderStatus = async (orderId, newStatus) => {
             body: JSON.stringify({ status: newStatus })
         });
         if (res.ok) {
-            alert('状态更新成功');
+            showToast('状态更新成功', 'success');
             loadAdminOrders();
             if (document.querySelector('.tab.active')?.getAttribute('data-tab') === 'orders') {
                 loadOrders();
             }
         } else {
             const err = await res.json();
-            alert('更新失败：' + (err.detail || '未知错误'));
+            showToast('更新失败：' + (err.detail || '未知错误'), 'error');
         }
     } catch(e) {
         if (e.message === 'Forbidden' || e.message === 'NotLoggedIn') return;
-        alert('网络错误');
+        showToast('网络错误', 'error');
     }
 };
 
 // ==================== 添加管理员功能 ====================
 function showAddAdminModal() {
     if (adminAccessDenied) {
-        alert('用户权限不够无法访问');
+        showToast('用户权限不够无法访问', 'error');
         goToChat();
         return;
     }
@@ -662,9 +685,9 @@ async function confirmAddAdmin() {
     const username = document.getElementById('newAdminName').value.trim();
     const pwd1 = document.getElementById('newAdminPwd1').value;
     const pwd2 = document.getElementById('newAdminPwd2').value;
-    if (!username) { alert('请输入管理员昵称'); return; }
-    if (pwd1.length < 6) { alert('密码至少6位'); return; }
-    if (pwd1 !== pwd2) { alert('两次密码不一致'); return; }
+    if (!username) { showToast('请输入管理员昵称', 'warning'); return; }
+    if (pwd1.length < 6) { showToast('密码至少6位', 'warning'); return; }
+    if (pwd1 !== pwd2) { showToast('两次密码不一致', 'warning'); return; }
     try {
         const res = await fetchWithAdminToken(`${API_BASE}/api/admin/users`, {
             method: 'POST',
@@ -672,15 +695,15 @@ async function confirmAddAdmin() {
             body: JSON.stringify({ username, password: pwd1 })
         });
         if (res.ok) {
-            alert('系统已成功添加管理员');
+            showToast('系统已成功添加管理员', 'success');
             closeAddAdminModal();
         } else {
             const err = await res.json();
-            alert('添加失败：' + (err.detail || '未知错误'));
+            showToast('添加失败：' + (err.detail || '未知错误'), 'error');
         }
     } catch(e) {
         if (e.message === 'Forbidden' || e.message === 'NotLoggedIn') return;
-        alert('网络错误');
+        showToast('网络错误', 'error');
     }
 }
 
@@ -710,7 +733,7 @@ async function loadAdminData() {
             return;
         }
         console.error(e);
-        alert("加载对话记录失败");
+        showToast('加载对话记录失败', 'error');
     }
 
     if (adminAccessDenied) return;
@@ -728,7 +751,7 @@ async function loadAdminData() {
         `).join('');
     } catch(e) {
         if (e.message === 'Forbidden' || e.message === 'NotLoggedIn') return;
-        alert("加载FAQ失败");
+        showToast('加载FAQ失败', 'error');
     }
 
     await loadProductManagement();
@@ -742,7 +765,7 @@ window.deleteFaq = async function(question) {
         loadAdminData();
     } catch(e) {
         if (e.message === 'Forbidden' || e.message === 'NotLoggedIn') return;
-        alert("删除失败");
+        showToast('删除失败', 'error');
     }
 };
 
@@ -762,7 +785,7 @@ window.addFaq = async function() {
         loadAdminData();
     } catch(e) {
         if (e.message === 'Forbidden' || e.message === 'NotLoggedIn') return;
-        alert("添加失败");
+        showToast('添加失败', 'error');
     }
 };
 
@@ -807,7 +830,7 @@ function switchTab(tabId) {
         }
         // 如果已经被拒绝，直接提示并跳转
         if (adminAccessDenied) {
-            alert('用户权限不够无法访问');
+            showToast('用户权限不够无法访问', 'error');
             goToChat();
             return;
         }
@@ -819,22 +842,6 @@ function switchTab(tabId) {
             if (el) el.innerHTML = '<tr><td colspan="10" style="text-align:center;">加载中...</td></tr>';
         });
         loadAdminData().catch(err => console.error(err));
-        // 折叠按钮事件绑定
-        const toggleBtn = document.getElementById('toggleLogBtn');
-        if (toggleBtn && !toggleBtn._listener) {
-            toggleBtn._listener = true;
-            toggleBtn.addEventListener('click', function() {
-                const container = document.getElementById('logContainer');
-                const arrow = document.getElementById('logArrow');
-                container.classList.toggle('hidden');
-                arrow.classList.toggle('fa-chevron-down');
-                arrow.classList.toggle('fa-chevron-right');
-            });
-        }
-        // 添加管理员按钮
-        document.getElementById('addAdminBtn')?.addEventListener('click', showAddAdminModal);
-        document.getElementById('closeAddAdminBtn')?.addEventListener('click', closeAddAdminModal);
-        document.getElementById('confirmAddAdminBtn')?.addEventListener('click', confirmAddAdmin);
     }
 }
 
@@ -891,6 +898,36 @@ function init() {
         addProductBtn.addEventListener('click', () => window.addNewProduct());
     } else {
         console.error('找不到 addProductBtn 元素');
+    }
+
+    // 添加管理员按钮事件（仅绑定一次）
+    const addAdminBtn = document.getElementById('addAdminBtn');
+    if (addAdminBtn && !addAdminBtn._listener) {
+        addAdminBtn._listener = true;
+        addAdminBtn.addEventListener('click', showAddAdminModal);
+    }
+    const closeAddAdminBtn = document.getElementById('closeAddAdminBtn');
+    if (closeAddAdminBtn && !closeAddAdminBtn._listener) {
+        closeAddAdminBtn._listener = true;
+        closeAddAdminBtn.addEventListener('click', closeAddAdminModal);
+    }
+    const confirmAddAdminBtn = document.getElementById('confirmAddAdminBtn');
+    if (confirmAddAdminBtn && !confirmAddAdminBtn._listener) {
+        confirmAddAdminBtn._listener = true;
+        confirmAddAdminBtn.addEventListener('click', confirmAddAdmin);
+    }
+
+    // 折叠按钮事件（仅绑定一次）
+    const toggleBtn = document.getElementById('toggleLogBtn');
+    if (toggleBtn && !toggleBtn._listener) {
+        toggleBtn._listener = true;
+        toggleBtn.addEventListener('click', function() {
+            const container = document.getElementById('logContainer');
+            const arrow = document.getElementById('logArrow');
+            container.classList.toggle('hidden');
+            arrow.classList.toggle('fa-chevron-down');
+            arrow.classList.toggle('fa-chevron-right');
+        });
     }
 
     document.querySelectorAll('.tab').forEach(tab => {
