@@ -2,14 +2,18 @@ import uuid
 import hashlib
 import os
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime, timedelta, timezone
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from .database import get_db
 from .db import User
 
+import bcrypt
+
 SECRET_KEY = os.getenv("JWT_SECRET", "x-drone-secret-key-change-in-prod")
 ALGORITHM = "HS256"
+TOKEN_EXPIRE_HOURS = 24
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -23,11 +27,54 @@ class LoginRequest(BaseModel):
     password: str
 
 def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+def _legacy_hash_password(password: str) -> str:
     return hashlib.sha256((password + "x-drone-salt").encode()).hexdigest()
 
+def verify_password(plain_password: str, stored_hash: str) -> bool:
+    if not stored_hash:
+        return False
+    try:
+        return bcrypt.checkpw(plain_password.encode("utf-8"), stored_hash.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
+
+def is_legacy_hash(stored_hash: str) -> bool:
+    return bool(stored_hash) and not stored_hash.startswith("$2b$") and len(stored_hash) == 64
+
 def create_token(user_id: str, username: str) -> str:
-    payload = {"sub": user_id, "username": username}
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": user_id,
+        "username": username,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(hours=TOKEN_EXPIRE_HOURS)).timestamp()),
+    }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+def get_current_user(authorization: str = Header(None), db: Session = Depends(get_db)) -> User:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="缺少认证")
+    token = authorization.split(" ", 1)[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="无效token")
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="用户不存在")
+        return user
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="登录已过期，请重新登录")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="无效token")
+
+def verify_admin(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="无权限，仅管理员可访问")
+    return current_user
 
 @router.post("/register")
 def register(req: RegisterRequest, db: Session = Depends(get_db)):
@@ -42,7 +89,7 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
         username=req.username,
         password_hash=hash_password(req.password),
         is_guest="0",
-        role="user"           # 新增：默认为普通用户
+        role="user"
     )
     db.add(new_user)
     db.commit()
@@ -52,8 +99,22 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
 @router.post("/login")
 def login(req: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == req.username).first()
-    if not user or user.password_hash != hash_password(req.password):
+    if not user:
         raise HTTPException(status_code=401, detail="用户名或密码错误")
+    auth_ok = False
+    need_upgrade = False
+    if is_legacy_hash(user.password_hash):
+        if user.password_hash == _legacy_hash_password(req.password):
+            auth_ok = True
+            need_upgrade = True
+    else:
+        if verify_password(req.password, user.password_hash):
+            auth_ok = True
+    if not auth_ok:
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
+    if need_upgrade:
+        user.password_hash = hash_password(req.password)
+        db.commit()
     token = create_token(user.id, user.username)
     return {"token": token, "user_id": user.id, "username": user.username}
 
@@ -66,7 +127,7 @@ def guest_login(db: Session = Depends(get_db)):
         username=guest_name,
         password_hash="",
         is_guest="1",
-        role="user"          # 游客也是普通用户
+        role="user"
     )
     db.add(new_user)
     db.commit()

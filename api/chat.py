@@ -3,14 +3,13 @@ import uuid
 import time
 import requests
 from collections import defaultdict
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List
 from .database import get_db
 from .db import Conversation, FAQ, User
-import jwt
-from .auth import SECRET_KEY, ALGORITHM
+from .auth import get_current_user
 
 router = APIRouter()
 
@@ -29,6 +28,19 @@ DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 
 _user_last_time = defaultdict(float)
 
+_faq_cache: dict = {"items": [], "dirty": True, "loaded_at": 0.0}
+FAQ_CACHE_TTL = 300
+
+def reload_faq_cache(db: Session) -> List[FAQ]:
+    faqs = db.query(FAQ).all()
+    _faq_cache["items"] = [(f.question.lower(), f.answer) for f in faqs]
+    _faq_cache["dirty"] = False
+    _faq_cache["loaded_at"] = time.time()
+    return faqs
+
+def invalidate_faq_cache():
+    _faq_cache["dirty"] = True
+
 def get_conversation_history(db: Session, user_id: str, session_id: str, limit: int = 5) -> List[dict]:
     history = db.query(Conversation).filter(
         Conversation.user_id == user_id,
@@ -42,25 +54,13 @@ def get_conversation_history(db: Session, user_id: str, session_id: str, limit: 
 
 def find_faq_match(db: Session, user_message: str) -> str | None:
     msg_lower = user_message.lower().strip()
-    all_faqs = db.query(FAQ).all()
-    for faq in all_faqs:
-        if faq.question.lower() in msg_lower or msg_lower in faq.question.lower():
-            return faq.answer
+    now = time.time()
+    if _faq_cache["dirty"] or now - _faq_cache["loaded_at"] > FAQ_CACHE_TTL:
+        reload_faq_cache(db)
+    for question_lower, answer in _faq_cache["items"]:
+        if question_lower in msg_lower or msg_lower in question_lower:
+            return answer
     return None
-
-def get_current_user_from_token(authorization: str = Header(None), db: Session = Depends(get_db)):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="缺少认证")
-    token = authorization.split(" ")[1]
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="用户不存在")
-        return user
-    except:
-        raise HTTPException(status_code=401, detail="无效token")
 
 @router.post("/chat")
 def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
@@ -133,10 +133,10 @@ def fallback_reply(message: str) -> str:
     elif "保修" in msg_lower:
         return "整机保修1年，电池保修6个月，人为损坏不在保修范围内。"
     else:
-        return f"您好，我是X-Drone售后助手。您的问题是：“{message}”。我会尽力为您解答。如需更多帮助，请拨打客服热线。"
+        return f'您好，我是X-Drone售后助手。您的问题是："{message}"。我会尽力为您解答。如需更多帮助，请拨打客服热线。'
 
 @router.get("/history")
-def get_user_history(user: User = Depends(get_current_user_from_token), db: Session = Depends(get_db)):
+def get_user_history(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     convs = db.query(Conversation).filter(Conversation.user_id == user.id).order_by(Conversation.timestamp.desc()).limit(100).all()
     return [{
         "id": c.id,

@@ -1,29 +1,44 @@
-# 环境变量（含 API Key 和数据库密码）
+# 环境变量（API Key、数据库密码、JWT密钥）
 .env
 
 # 本地 SQLite 数据库文件
-local_database.db
+*.db
+*.sqlite
+*.sqlite3
 
-# Python 缓存
+# Python 字节码 & 缓存
 __pycache__/
+*.py[cod]
 *.pyc
 *.pyo
+*.pyd
+.Python
+*.so
 
 # 虚拟环境
 venv/
 env/
 .venv/
+ENV/
 
 # IDE 配置
 .vscode/
 .idea/
 *.swp
-
-# 日志文件
+*.swo
+*.swn
+.DS_Store
 *.log
 
-# macOS 系统文件
-.DS_Store
-
-# 部署相关临时目录（如果本地有）
+# Railway 部署缓存
 .railway/
+
+# 前端构建产物（如果有）
+dist/
+build/
+node_modules/
+
+# 其他本地临时文件
+*.tmp
+*.temp
+.cache/

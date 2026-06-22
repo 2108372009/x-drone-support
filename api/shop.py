@@ -1,29 +1,14 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from .database import get_db
 from .db import Product, Order, User
-from .auth import SECRET_KEY, ALGORITHM
-import jwt
+from .auth import get_current_user
 from datetime import datetime
-from zoneinfo import ZoneInfo   # Python 3.9+ 内置
+from zoneinfo import ZoneInfo
 
 router = APIRouter(prefix="/shop", tags=["shop"])
-
-def get_current_user(authorization: str = Header(None), db: Session = Depends(get_db)):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="缺少认证")
-    token = authorization.split(" ")[1]
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="用户不存在")
-        return user
-    except:
-        raise HTTPException(status_code=401, detail="无效token")
 
 @router.get("/products")
 def list_products(db: Session = Depends(get_db)):
@@ -64,7 +49,6 @@ def purchase(req: PurchaseRequest, user: User = Depends(get_current_user), db: S
         total_price=total_str,
         total_value=total_val,
         status="待发货"
-        # created_at 由数据库默认值自动填充（UTC 时间）
     )
     db.add(new_order)
     db.commit()
@@ -79,12 +63,10 @@ def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_
     result = []
     for o in orders:
         if o.created_at:
-            # 如果 created_at 是 naive（无时区），假设为 UTC
             if o.created_at.tzinfo is None:
                 utc_dt = o.created_at.replace(tzinfo=ZoneInfo("UTC"))
             else:
                 utc_dt = o.created_at
-            # 转换为北京时间
             beijing_dt = utc_dt.astimezone(ZoneInfo("Asia/Shanghai"))
             created_at_str = beijing_dt.strftime("%Y-%m-%d %H:%M:%S")
         else:

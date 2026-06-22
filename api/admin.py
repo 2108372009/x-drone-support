@@ -1,17 +1,14 @@
-import os
 import uuid
-import jwt
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
 from .database import get_db
 from .db import FAQ, Conversation, User, Product, Order
-from .auth import SECRET_KEY, ALGORITHM, hash_password
+from .auth import hash_password, verify_admin, get_current_user
+from .chat import invalidate_faq_cache
 
 router = APIRouter()
-
-# 移除 ADMIN_SECRET，不再使用
 
 class FAQItem(BaseModel):
     question: str
@@ -34,25 +31,6 @@ class OrderStatusUpdate(BaseModel):
 class CreateAdminRequest(BaseModel):
     username: str
     password: str
-
-# 新的验证依赖：通过 JWT 获取当前用户，并检查是否为管理员
-def verify_admin(authorization: str = Header(None), db: Session = Depends(get_db)):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="请先登录")
-    token = authorization.split(" ")[1]
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="用户不存在")
-        if user.role != "admin":
-            raise HTTPException(status_code=403, detail="无权限，仅管理员可访问")
-        return user
-    except:
-        raise HTTPException(status_code=401, detail="无效token")
-
-# ----- 以下所有路由的依赖改为 user: User = Depends(verify_admin) -----
 
 @router.get("/admin/conversations")
 async def get_conversations(user: User = Depends(verify_admin), db: Session = Depends(get_db)):
@@ -82,15 +60,16 @@ async def save_faq(item: FAQItem, user: User = Depends(verify_admin), db: Sessio
         faq = FAQ(question=item.question, answer=item.answer)
         db.add(faq)
     db.commit()
+    invalidate_faq_cache()
     return {"message": "保存成功"}
 
 @router.delete("/admin/faqs")
 async def delete_faq(question: str, user: User = Depends(verify_admin), db: Session = Depends(get_db)):
     db.query(FAQ).filter(FAQ.question == question).delete()
     db.commit()
+    invalidate_faq_cache()
     return {"message": "删除成功"}
 
-# ==================== 商品管理接口 ====================
 @router.get("/admin/products")
 async def list_products(user: User = Depends(verify_admin), db: Session = Depends(get_db)):
     products = db.query(Product).all()
@@ -141,7 +120,6 @@ async def delete_product(product_id: str, user: User = Depends(verify_admin), db
     db.commit()
     return {"message": "商品已下架删除"}
 
-# ==================== 订单管理接口 ====================
 @router.get("/admin/orders")
 async def get_all_orders(user: User = Depends(verify_admin), db: Session = Depends(get_db)):
     orders = db.query(Order, User.username).join(User, Order.user_id == User.id).order_by(Order.created_at.desc()).limit(100).all()
@@ -170,14 +148,11 @@ async def update_order_status(order_id: str, update: OrderStatusUpdate, user: Us
     db.commit()
     return {"message": "状态更新成功", "new_status": order.status}
 
-# ==================== 添加管理员接口 ====================
 @router.post("/admin/users")
 async def create_admin(req: CreateAdminRequest, current_admin: User = Depends(verify_admin), db: Session = Depends(get_db)):
-    # 检查用户名是否已存在
     existing = db.query(User).filter(User.username == req.username).first()
     if existing:
         raise HTTPException(status_code=400, detail="用户名已存在")
-    # 创建新管理员
     new_user = User(
         id=f"usr_{uuid.uuid4().hex[:12]}",
         username=req.username,

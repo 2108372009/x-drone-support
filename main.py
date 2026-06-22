@@ -19,13 +19,15 @@ from api.shop import router as shop_router
 from api.db import Product, User
 from api.auth import hash_password
 
+INIT_ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "阮志男")
+INIT_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "222qqq")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 正在启动服务...")
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
-        # ===== 商品数据初始化（仅在表为空时） =====
         if db.query(Product).count() == 0:
             items = [
                 Product(id="prod_pro", name="X-Drone Pro 专业旗舰版", description="1英寸传感器，45分钟续航，全向避障", price="¥8,999", price_value=899900, stock=10),
@@ -39,23 +41,21 @@ async def lifespan(app: FastAPI):
             db.commit()
             print("✅ 商品数据初始化完成")
 
-        # ===== 初始化默认管理员 =====
         admin_exists = db.query(User).filter(User.role == "admin").first()
         if not admin_exists:
             admin = User(
                 id=f"usr_{uuid.uuid4().hex[:12]}",
-                username="阮志男",
-                password_hash=hash_password("222qqq"),
+                username=INIT_ADMIN_USERNAME,
+                password_hash=hash_password(INIT_ADMIN_PASSWORD),
                 is_guest="0",
                 role="admin"
             )
             db.add(admin)
             db.commit()
-            print("✅ 初始管理员创建成功：阮志男")
+            print(f"✅ 初始管理员创建成功：{INIT_ADMIN_USERNAME}")
         else:
             print("✅ 管理员已存在，跳过创建")
 
-        # ===== 迁移旧订单状态 =====
         try:
             from sqlalchemy import text
             db.execute(text("UPDATE orders SET status = '待发货' WHERE status = 'active'"))
@@ -84,7 +84,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 健康检查端点（Railway 需要）
 @app.get("/health")
 async def health_check():
     return JSONResponse(content={"status": "ok", "service": "x-drone-support"})
