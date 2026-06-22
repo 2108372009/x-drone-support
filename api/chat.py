@@ -2,6 +2,7 @@ import os
 import uuid
 import time
 import requests
+import re
 from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -20,8 +21,93 @@ class ChatRequest(BaseModel):
 
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 knowledge_path = os.path.join(base_dir, "knowledge_base.txt")
-with open(knowledge_path, "r", encoding="utf-8") as f:
-    SYSTEM_PROMPT = f.read().strip()
+
+# RAG: 知识库分块与索引
+_knowledge_chunks: List[dict] = []
+
+def load_and_chunk_knowledge():
+    """加载知识库并按段落分块"""
+    global _knowledge_chunks
+    with open(knowledge_path, "r", encoding="utf-8") as f:
+        content = f.read().strip()
+    
+    # 按段落分割（空行分隔）
+    paragraphs = re.split(r'\n\s*\n', content)
+    
+    _knowledge_chunks = []
+    for i, para in enumerate(paragraphs):
+        para = para.strip()
+        if not para:
+            continue
+        # 提取关键词（简单分词）
+        keywords = set(re.findall(r'[\u4e00-\u9fa5]+|[a-zA-Z0-9]+', para.lower()))
+        _knowledge_chunks.append({
+            "id": i,
+            "content": para,
+            "keywords": keywords
+        })
+    
+    print(f"✅ 知识库已加载，共 {len(_knowledge_chunks)} 个段落")
+
+# 启动时加载知识库
+load_and_chunk_knowledge()
+
+# 系统基础提示词
+BASE_SYSTEM_PROMPT = """你是X-Drone无人机品牌的官方售后专家"小智"。你的职责是为用户提供专业、准确、有温度的售后支持。
+
+【核心行为准则】
+1. 语气风格：亲切、耐心，称呼用户为"亲"。
+2. 严格基于提供的知识库内容回答问题，绝对禁止自行编造参数或政策。
+3. 未知问题处理：如果用户的问题超出了知识库范围，请委婉回复："亲，这个问题比较特殊，为了给您最准确的答复，建议您联系我们的专属客服电话12345678咨询哦。"
+4. 安全第一：涉及飞行安全的问题，必须给出最保守、最安全的建议。
+5. 主动引导：当用户的问题比较模糊时，请主动询问具体需求。"""
+
+def retrieve_relevant_chunks(user_message: str, top_k: int = 3) -> List[str]:
+    """RAG检索：根据用户问题找到最相关的知识库段落"""
+    msg_words = set(re.findall(r'[\u4e00-\u9fa5]+|[a-zA-Z0-9]+', user_message.lower()))
+    
+    # 计算每个段落的相关性分数
+    scores = []
+    for chunk in _knowledge_chunks:
+        # 关键词交集数量作为相关性分数
+        common_keywords = msg_words & chunk["keywords"]
+        score = len(common_keywords)
+        
+        # 额外加分：如果段落包含用户问题的核心词
+        for word in msg_words:
+            if len(word) >= 2 and word in chunk["content"].lower():
+                score += 0.5
+        
+        scores.append((score, chunk))
+    
+    # 按分数排序，取前top_k个
+    scores.sort(key=lambda x: x[0], reverse=True)
+    
+    # 只返回分数大于0的段落
+    relevant_chunks = []
+    for score, chunk in scores[:top_k]:
+        if score > 0:
+            relevant_chunks.append(chunk["content"])
+    
+    return relevant_chunks
+
+def build_rag_prompt(user_message: str) -> str:
+    """构建RAG增强的系统提示"""
+    relevant_chunks = retrieve_relevant_chunks(user_message)
+    
+    if not relevant_chunks:
+        # 没有找到相关段落，使用基础提示
+        return BASE_SYSTEM_PROMPT + "\n\n【当前无相关知识点】"
+    
+    # 构建带知识库的系统提示
+    knowledge_context = "\n\n".join([f"【知识点{i+1}】\n{chunk}" for i, chunk in enumerate(relevant_chunks)])
+    
+    return f"""{BASE_SYSTEM_PROMPT}
+
+【相关知识库内容】
+{knowledge_context}
+
+请基于以上知识库内容回答用户的问题。如果知识库中没有相关信息，请按照准则第3条处理。"""
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
@@ -70,6 +156,7 @@ def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=429, detail="亲，您发言太频繁啦，请休息3秒后再试～")
     _user_last_time[key] = now
 
+    # 1. 先尝试FAQ精确匹配
     faq_answer = find_faq_match(db, request.message)
     if faq_answer:
         ai_message = faq_answer
@@ -84,11 +171,18 @@ def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
         db.commit()
         return {"response": ai_message}
 
+    # 2. RAG检索：构建增强的系统提示
+    rag_system_prompt = build_rag_prompt(request.message)
+    
+    # 3. 获取对话历史
     history_messages = get_conversation_history(db, request.user_id, request.session_id, limit=5)
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    
+    # 4. 构建完整消息
+    messages = [{"role": "system", "content": rag_system_prompt}]
     messages.extend(history_messages)
     messages.append({"role": "user", "content": request.message})
 
+    # 5. 调用DeepSeek API
     if not DEEPSEEK_API_KEY:
         ai_message = fallback_reply(request.message)
     else:

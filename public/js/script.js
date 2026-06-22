@@ -29,6 +29,8 @@ const loginModal = document.getElementById('loginModal');
 const closeLoginBtn = document.getElementById('closeLoginBtn');
 const historyModal = document.getElementById('historyModal');
 const orderModal = document.getElementById('orderModal');
+const registerSuccessModal = document.getElementById('registerSuccessModal');
+const registerSuccessConfirmBtn = document.getElementById('registerSuccessConfirmBtn');
 
 // ==================== 工具函数 ====================
 function escapeHtml(text) {
@@ -386,6 +388,7 @@ async function handleLogin() {
             closeLoginModal();
             loadProducts();
             if (document.querySelector('.tab.active')?.getAttribute('data-tab') === 'orders') loadOrders();
+            setTimeout(() => showToast('登录成功！欢迎回来，' + data.username, 'success'), 150);
         } else {
             const err = await res.json();
             showToast('登录失败：' + (err.detail || '用户名或密码错误'), 'error');
@@ -426,7 +429,8 @@ async function handleRegister() {
             closeLoginModal();
             loadProducts();
             if (document.querySelector('.tab.active')?.getAttribute('data-tab') === 'orders') loadOrders();
-            showToast('注册成功！', 'success');
+            // 显示注册成功模态弹窗
+            registerSuccessModal.style.display = 'flex';
         } else {
             const err = await res.json();
             showToast('注册失败：' + (err.detail || '请重试'), 'error');
@@ -877,6 +881,20 @@ function init() {
     if (loginBtn) loginBtn.addEventListener('click', showLoginModal);
     if (logoutBtn) logoutBtn.addEventListener('click', () => { clearAuth(); location.reload(); });
     if (closeLoginBtn) closeLoginBtn.addEventListener('click', closeLoginModal);
+
+    // 注册成功弹窗确认按钮
+    if (registerSuccessConfirmBtn) {
+        registerSuccessConfirmBtn.addEventListener('click', () => {
+            registerSuccessModal.style.display = 'none';
+            // 切换到聊天界面
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector('.tab[data-tab="chat"]').classList.add('active');
+            document.getElementById('chatMain').classList.remove('hidden');
+            document.getElementById('shopView').classList.add('hidden');
+            document.getElementById('ordersView').classList.add('hidden');
+            document.getElementById('adminView').classList.add('hidden');
+        });
+    }
 
     safeAddEventListener('closeHistoryBtn', 'click', closeHistoryModal);
     safeAddEventListener('closeOrderBtn', 'click', closeOrderModal);

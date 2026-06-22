@@ -450,23 +450,30 @@ button.delete-btn { background: #dc3545; border: none; color: white; padding: 4p
 
 .error-toast {
     position: fixed;
-    bottom: 100px;
+    bottom: 120px;
     left: 50%;
-    transform: translateX(-50%);
     background: #dc2626;
     color: white;
-    padding: 12px 24px;
+    padding: 14px 32px;
     border-radius: 30px;
-    font-size: 0.9rem;
-    box-shadow: 0 4px 20px rgba(220, 38, 38, 0.4);
-    z-index: 9999;
-    animation: slideUp 0.3s ease;
+    font-size: 0.95rem;
+    box-shadow: 0 4px 24px rgba(220, 38, 38, 0.5);
+    z-index: 99999 !important;
+    animation: toastSlideUp 0.3s ease forwards;
     max-width: 90%;
     text-align: center;
+    font-weight: 500;
+    pointer-events: none;
 }
-@keyframes slideUp {
-    from { opacity: 0; transform: translate(-50%, 20px); }
-    to { opacity: 1; transform: translate(-50%, 0); }
+@keyframes toastSlideUp {
+    from {
+        opacity: 0;
+        transform: translate(-50%, 20px);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
 }
-.error-toast.success { background: #10b981; box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4); }
-.error-toast.warning { background: #f59e0b; box-shadow: 0 4px 20px rgba(245, 158, 11, 0.4); }
+.error-toast.success { background: #10b981; box-shadow: 0 4px 24px rgba(16, 185, 129, 0.5); color: white; }
+.error-toast.warning { background: #f59e0b; box-shadow: 0 4px 24px rgba(245, 158, 11, 0.5); color: white; }

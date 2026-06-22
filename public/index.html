@@ -169,6 +169,21 @@
 
     <div id="historyModal" class="modal"><div class="modal-content"><div class="modal-header"><h3>历史对话</h3><button id="closeHistoryBtn">&times;</button></div><div class="modal-body" id="historyModalBody"></div></div></div>
     <div id="orderModal" class="modal"><div class="modal-content"><div class="modal-header"><h3>订单查询</h3><button id="closeOrderBtn">&times;</button></div><div class="modal-body"><input type="text" id="orderIdInput" placeholder="订单号 XD..."><button id="queryOrderBtn">查询</button><div id="orderResult"></div></div></div></div>
+
+    <!-- 注册成功确认弹窗 -->
+    <div id="registerSuccessModal" class="modal">
+        <div class="modal-content" style="max-width:420px; text-align:center;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #10b981, #059669);">
+                <h3>🎉 注册成功</h3>
+            </div>
+            <div class="modal-body" style="padding: 30px 20px;">
+                <div style="font-size: 48px; margin-bottom: 16px;">✅</div>
+                <p style="font-size: 1.1rem; color: #1e293b; margin-bottom: 8px;">恭喜您成功注册 X-Drone 账号！</p>
+                <p style="color: #64748b; margin-bottom: 24px;">现在可以开始与智能客服小智对话了</p>
+                <button id="registerSuccessConfirmBtn" style="background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 14px 40px; border-radius: 30px; font-size: 1rem; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);">开始对话</button>
+            </div>
+        </div>
+    </div>
 </div>
 <script src="/js/script.js"></script>
 </body>
