@@ -63,10 +63,11 @@
     <!-- 后台管理视图 -->
     <div id="adminView" class="hidden view-container">
         <!-- 最近对话记录（折叠） -->
-        <h3 style="cursor:pointer;" id="toggleLogBtn">
-            <i class="fas fa-chevron-down" id="logArrow"></i> 最近对话记录
+        <h3 class="collapsible-header" id="toggleLogBtn">
+            <i class="fas fa-chevron-down arrow-icon" id="logArrow"></i> 
+            <span>最近对话记录</span>
         </h3>
-        <div id="logContainer" style="overflow-x:auto;">
+        <div id="logContainer" class="collapsible-container" style="overflow-x:auto;">
             <table id="logTable">
                 <thead><tr><th>时间</th><th>用户</th><th>会话ID</th><th>提问</th><th>AI回复</th></tr></thead>
                 <tbody></tbody>
@@ -102,10 +103,11 @@
         </div>
 
         <!-- 订单管理（折叠） -->
-        <h3 style="cursor:pointer;" id="toggleOrderBtn">
-            <i class="fas fa-chevron-down" id="orderArrow"></i> 订单管理
+        <h3 class="collapsible-header" id="toggleOrderBtn">
+            <i class="fas fa-chevron-down arrow-icon" id="orderArrow"></i>
+            <span>订单管理</span>
         </h3>
-        <div id="orderContainer" style="overflow-x:auto;">
+        <div id="orderContainer" class="collapsible-container" style="overflow-x:auto;">
             <table id="adminOrderTable">
                 <thead>
                     <tr>

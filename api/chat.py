@@ -22,11 +22,11 @@ class ChatRequest(BaseModel):
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 knowledge_path = os.path.join(base_dir, "knowledge_base.txt")
 
-# RAG: 知识库分块与索引
+# RAG: 知识库分块与关键词索引
 _knowledge_chunks: List[dict] = []
 
 def load_and_chunk_knowledge():
-    """加载知识库并按段落分块"""
+    """加载知识库并按段落分块，建立关键词索引"""
     global _knowledge_chunks
     with open(knowledge_path, "r", encoding="utf-8") as f:
         content = f.read().strip()
@@ -39,7 +39,7 @@ def load_and_chunk_knowledge():
         para = para.strip()
         if not para:
             continue
-        # 提取关键词（简单分词）
+        # 提取关键词（中文分词 + 英文单词）
         keywords = set(re.findall(r'[\u4e00-\u9fa5]+|[a-zA-Z0-9]+', para.lower()))
         _knowledge_chunks.append({
             "id": i,
@@ -63,7 +63,7 @@ BASE_SYSTEM_PROMPT = """你是X-Drone无人机品牌的官方售后专家"小智
 5. 主动引导：当用户的问题比较模糊时，请主动询问具体需求。"""
 
 def retrieve_relevant_chunks(user_message: str, top_k: int = 3) -> List[str]:
-    """RAG检索：根据用户问题找到最相关的知识库段落"""
+    """RAG检索：根据用户问题找到最相关的知识库段落（关键词匹配）"""
     msg_words = set(re.findall(r'[\u4e00-\u9fa5]+|[a-zA-Z0-9]+', user_message.lower()))
     
     # 计算每个段落的相关性分数

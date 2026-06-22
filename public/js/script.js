@@ -483,41 +483,6 @@ function showNoPermission() {
     });
 }
 
-async function loadProductManagement() {
-    if (adminAccessDenied) return;
-    try {
-        const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products`);
-        const products = await res.json();
-        const tbody = document.querySelector('#productTable tbody');
-        if (!tbody) return;
-        if (products.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5">暂无商品，请点击"上架新产品"添加</td></tr>';
-            return;
-        }
-        tbody.innerHTML = products.map(p => `
-            <tr>
-                <td>${escapeHtml(p.name)}</td>
-                <td>${p.price}</td>
-                <td id="stock-${p.id}">${p.stock}</td>
-                <td>
-                    <button class="small" onclick="adjustStock('${p.id}', 1)">+1</button>
-                    <button class="small" onclick="adjustStock('${p.id}', -1)">-1</button>
-                    <button class="small" onclick="adjustStock('${p.id}', 10)">+10</button>
-                    <button class="small" onclick="adjustStock('${p.id}', -10)">-10</button>
-                    <button class="small" style="background:#dc3545; margin-left:8px;" onclick="deleteProduct('${p.id}')">下架</button>
-                  </td>
-            </tr>
-        `).join('');
-    } catch(e) {
-        if (e.message === 'Forbidden' || e.message === 'NotLoggedIn') {
-            // 已由 fetchWithAdminToken 处理跳转
-            return;
-        }
-        console.error(e);
-        showToast('加载商品列表失败', 'error');
-    }
-}
-
 window.adjustStock = async (productId, delta) => {
     if (adminAccessDenied) return;
     try {
@@ -528,6 +493,11 @@ window.adjustStock = async (productId, delta) => {
         });
         if (res.ok) {
             const data = await res.json();
+            // 更新缓存中的库存
+            if (adminDataCache.products) {
+                const product = adminDataCache.products.find(p => p.id === productId);
+                if (product) product.stock = data.stock;
+            }
             const stockCell = document.getElementById(`stock-${productId}`);
             if (stockCell) {
                 stockCell.innerText = data.stock;
@@ -570,6 +540,7 @@ window.addNewProduct = async () => {
             body: JSON.stringify({ name, description, price: priceDisplay, price_value: priceValue, stock, image_url: imageUrl })
         });
         if (res.ok) {
+            const data = await res.json();
             showToast('新产品上架成功', 'success');
             document.getElementById('newProdName').value = '';
             document.getElementById('newProdDesc').value = '';
@@ -577,7 +548,8 @@ window.addNewProduct = async () => {
             document.getElementById('newProdPriceYuan').value = '';
             document.getElementById('newProdStock').value = '';
             document.getElementById('newProdImage').value = '';
-            loadProductManagement();
+            // 强制刷新后台数据
+            loadAdminData(true);
             loadProducts();
         } else {
             const err = await res.json();
@@ -596,7 +568,11 @@ window.deleteProduct = async (productId) => {
         const res = await fetchWithAdminToken(`${API_BASE}/api/admin/products/${productId}`, { method: 'DELETE' });
         if (res.ok) {
             showToast('商品已下架删除', 'success');
-            loadProductManagement();
+            // 从缓存中移除
+            if (adminDataCache.products) {
+                adminDataCache.products = adminDataCache.products.filter(p => p.id !== productId);
+            }
+            loadAdminData(true);
             loadProducts();
         } else {
             const err = await res.json();
@@ -609,51 +585,6 @@ window.deleteProduct = async (productId) => {
 };
 
 // ==================== 管理员订单管理 ====================
-async function loadAdminOrders() {
-    if (adminAccessDenied) return;
-    try {
-        const res = await fetchWithAdminToken(
-            `${API_BASE}/api/admin/orders?page=${adminOrdersPage}&page_size=${adminOrdersPageSize}`
-        );
-        const ordersData = await res.json();
-        const tbody = document.querySelector('#adminOrderTable tbody');
-        if (!tbody) return;
-        const items = ordersData.items || ordersData;
-        if (!items.length) {
-            tbody.innerHTML = '<tr><td colspan="7">暂无订单</td></tr>';
-        } else {
-            tbody.innerHTML = items.map(o => `
-                <tr>
-                    <td>${escapeHtml(o.order_id)}</td>
-                    <td>${escapeHtml(o.username)}</td>
-                    <td>${escapeHtml(o.product_name)}</td>
-                    <td>${o.quantity}</td>
-                    <td>${o.total_price}</td>
-                    <td><span class="order-status ${o.status}">${o.status}</span></td>
-                    <td>
-                        <select onchange="updateOrderStatus('${o.order_id}', this.value)">
-                            <option value="待发货" ${o.status==='待发货'?'selected':''}>待发货</option>
-                            <option value="运输中" ${o.status==='运输中'?'selected':''}>运输中</option>
-                            <option value="已送达" ${o.status==='已送达'?'selected':''}>已送达</option>
-                        </select>
-                    </td>
-                </tr>
-            `).join('');
-        }
-        adminOrdersTotalPages = ordersData.total_pages || 1;
-        renderPagination(
-            'ordersPagination',
-            adminOrdersPage,
-            adminOrdersTotalPages,
-            () => { adminOrdersPage--; loadAdminOrders(); },
-            () => { adminOrdersPage++; loadAdminOrders(); }
-        );
-    } catch(e) {
-        if (e.message === 'Forbidden' || e.message === 'NotLoggedIn') return;
-        console.error(e);
-        showToast('加载订单列表失败', 'error');
-    }
-}
 
 window.updateOrderStatus = async (orderId, newStatus) => {
     if (adminAccessDenied) return;
@@ -665,7 +596,12 @@ window.updateOrderStatus = async (orderId, newStatus) => {
         });
         if (res.ok) {
             showToast('状态更新成功', 'success');
-            loadAdminOrders();
+            // 更新缓存中的订单状态
+            if (adminDataCache.orders && adminDataCache.orders.items) {
+                const order = adminDataCache.orders.items.find(o => o.order_id === orderId);
+                if (order) order.status = newStatus;
+            }
+            renderOrdersFromCache();
             if (document.querySelector('.tab.active')?.getAttribute('data-tab') === 'orders') {
                 loadOrders();
             }
@@ -722,6 +658,17 @@ async function confirmAddAdmin() {
     }
 }
 
+// ==================== 后台管理数据缓存 ====================
+let adminDataCache = {
+    logs: null,
+    faqs: null,
+    products: null,
+    orders: null,
+    loaded: false,
+    logsPage: 1,
+    ordersPage: 1
+};
+
 // ==================== 分页状态 ====================
 let logsPage = 1;
 let logsPageSize = 20;
@@ -752,10 +699,16 @@ function renderPagination(containerId, currentPage, totalPages, onPrev, onNext) 
     if (nextBtn && currentPage < totalPages) nextBtn.onclick = onNext;
 }
 
-// ==================== 加载后台数据 ====================
-async function loadAdminData() {
+// ==================== 加载后台数据（带缓存） ====================
+async function loadAdminData(forceReload = false) {
     if (adminAccessDenied) {
         goToChat();
+        return;
+    }
+
+    // 如果已有缓存且不强制刷新，直接渲染缓存数据
+    if (adminDataCache.loaded && !forceReload) {
+        renderAdminDataFromCache();
         return;
     }
 
@@ -764,65 +717,143 @@ async function loadAdminData() {
             `${API_BASE}/api/admin/conversations?page=${logsPage}&page_size=${logsPageSize}`
         );
         const logsData = await logsResp.json();
-        const tbody = document.querySelector('#logTable tbody');
-        const items = logsData.items || logsData;
-        if (!items.length) {
-            tbody.innerHTML = '<tr><td colspan="5">暂无对话记录</td></tr>';
-        } else {
-            tbody.innerHTML = items.map(l => `
-                <tr>
-                    <td>${escapeHtml(formatLocalTime(l.timestamp))}</td>
-                    <td>${escapeHtml(l.username || l.user_id)}</td>
-                    <td>${escapeHtml(l.session_id)}</td>
-                    <td>${escapeHtml(l.user_message)}</td>
-                    <td>${escapeHtml(l.ai_reply)}</td>
-                </tr>
-            `).join('');
-        }
+        adminDataCache.logs = logsData;
         logsTotalPages = logsData.total_pages || 1;
-        renderPagination(
-            'logsPagination',
-            logsPage,
-            logsTotalPages,
-            () => { logsPage--; loadAdminData(); },
-            () => { logsPage++; loadAdminData(); }
+
+        const faqsResp = await fetchWithAdminToken(`${API_BASE}/api/admin/faqs`);
+        adminDataCache.faqs = await faqsResp.json();
+
+        const productsResp = await fetchWithAdminToken(`${API_BASE}/api/admin/products`);
+        adminDataCache.products = await productsResp.json();
+
+        const ordersResp = await fetchWithAdminToken(
+            `${API_BASE}/api/admin/orders?page=${adminOrdersPage}&page_size=${adminOrdersPageSize}`
         );
+        adminDataCache.orders = await ordersResp.json();
+        adminOrdersTotalPages = adminDataCache.orders.total_pages || 1;
+
+        adminDataCache.loaded = true;
+        renderAdminDataFromCache();
     } catch(e) {
         if (e.message === 'Forbidden' || e.message === 'NotLoggedIn') {
-            // 已由 fetchWithAdminToken 处理
             return;
         }
         console.error(e);
-        showToast('加载对话记录失败', 'error');
+        showToast('加载后台数据失败', 'error');
     }
+}
 
-    if (adminAccessDenied) return;
-
-    try {
-        const faqsResp = await fetchWithAdminToken(`${API_BASE}/api/admin/faqs`);
-        const faqs = await faqsResp.json();
-        const faqBody = document.querySelector('#faqTable tbody');
-        faqBody.innerHTML = faqs.map(f => `
+// 从缓存渲染后台数据
+function renderAdminDataFromCache() {
+    // 渲染对话记录
+    const logTbody = document.querySelector('#logTable tbody');
+    const logsData = adminDataCache.logs;
+    const logItems = logsData?.items || [];
+    if (!logItems.length) {
+        logTbody.innerHTML = '<tr><td colspan="5">暂无对话记录</td></tr>';
+    } else {
+        logTbody.innerHTML = logItems.map(l => `
             <tr>
-                <td>${escapeHtml(f.question)}</td>
-                <td>${escapeHtml(f.answer)}</td>
-                <td><button class="delete-btn" onclick="deleteFaq('${f.question.replace(/'/g, "\\'")}')">删除</button></td>
+                <td>${escapeHtml(formatLocalTime(l.timestamp))}</td>
+                <td>${escapeHtml(l.username || l.user_id)}</td>
+                <td>${escapeHtml(l.session_id)}</td>
+                <td>${escapeHtml(l.user_message)}</td>
+                <td>${escapeHtml(l.ai_reply)}</td>
             </tr>
         `).join('');
-    } catch(e) {
-        if (e.message === 'Forbidden' || e.message === 'NotLoggedIn') return;
-        showToast('加载FAQ失败', 'error');
     }
+    renderPagination(
+        'logsPagination',
+        logsPage,
+        logsTotalPages,
+        () => { logsPage--; loadAdminData(true); },
+        () => { logsPage++; loadAdminData(true); }
+    );
 
-    await loadProductManagement();
-    await loadAdminOrders();
+    // 渲染FAQ
+    const faqBody = document.querySelector('#faqTable tbody');
+    const faqs = adminDataCache.faqs || [];
+    faqBody.innerHTML = faqs.map(f => `
+        <tr>
+            <td>${escapeHtml(f.question)}</td>
+            <td>${escapeHtml(f.answer)}</td>
+            <td><button class="delete-btn" onclick="deleteFaq('${f.question.replace(/'/g, "\\'")}')">删除</button></td>
+        </tr>
+    `).join('');
+
+    // 渲染商品
+    renderProductsFromCache();
+
+    // 渲染订单
+    renderOrdersFromCache();
+}
+
+function renderProductsFromCache() {
+    const tbody = document.querySelector('#productTable tbody');
+    const products = adminDataCache.products || [];
+    if (!products.length) {
+        tbody.innerHTML = '<tr><td colspan="5">暂无商品，请点击"上架新产品"添加</td></tr>';
+        return;
+    }
+    tbody.innerHTML = products.map(p => `
+        <tr>
+            <td>${escapeHtml(p.name)}</td>
+            <td>${p.price}</td>
+            <td id="stock-${p.id}">${p.stock}</td>
+            <td>
+                <button class="small" onclick="adjustStock('${p.id}', 1)">+1</button>
+                <button class="small" onclick="adjustStock('${p.id}', -1)">-1</button>
+                <button class="small" onclick="adjustStock('${p.id}', 10)">+10</button>
+                <button class="small" onclick="adjustStock('${p.id}', -10)">-10</button>
+                <button class="small" style="background:#dc3545; margin-left:8px;" onclick="deleteProduct('${p.id}')">下架</button>
+              </td>
+        </tr>
+    `).join('');
+}
+
+function renderOrdersFromCache() {
+    const tbody = document.querySelector('#adminOrderTable tbody');
+    const ordersData = adminDataCache.orders || {};
+    const items = ordersData.items || [];
+    if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="7">暂无订单</td></tr>';
+    } else {
+        tbody.innerHTML = items.map(o => `
+            <tr>
+                <td>${escapeHtml(o.order_id)}</td>
+                <td>${escapeHtml(o.username)}</td>
+                <td>${escapeHtml(o.product_name)}</td>
+                <td>${o.quantity}</td>
+                <td>${o.total_price}</td>
+                <td><span class="order-status ${o.status}">${o.status}</span></td>
+                <td>
+                    <select onchange="updateOrderStatus('${o.order_id}', this.value)">
+                        <option value="待发货" ${o.status==='待发货'?'selected':''}>待发货</option>
+                        <option value="运输中" ${o.status==='运输中'?'selected':''}>运输中</option>
+                        <option value="已送达" ${o.status==='已送达'?'selected':''}>已送达</option>
+                    </select>
+                </td>
+            </tr>
+        `).join('');
+    }
+    renderPagination(
+        'ordersPagination',
+        adminOrdersPage,
+        adminOrdersTotalPages,
+        () => { adminOrdersPage--; loadAdminData(true); },
+        () => { adminOrdersPage++; loadAdminData(true); }
+    );
 }
 
 window.deleteFaq = async function(question) {
     if (adminAccessDenied) return;
     try {
         await fetchWithAdminToken(`${API_BASE}/api/admin/faqs?question=${encodeURIComponent(question)}`, { method: 'DELETE' });
-        loadAdminData();
+        // 从缓存中移除
+        if (adminDataCache.faqs) {
+            adminDataCache.faqs = adminDataCache.faqs.filter(f => f.question !== question);
+        }
+        renderAdminDataFromCache();
     } catch(e) {
         if (e.message === 'Forbidden' || e.message === 'NotLoggedIn') return;
         showToast('删除失败', 'error');
@@ -842,7 +873,8 @@ window.addFaq = async function() {
         });
         document.getElementById('faqQ').value = '';
         document.getElementById('faqA').value = '';
-        loadAdminData();
+        // 强制刷新FAQ数据
+        loadAdminData(true);
     } catch(e) {
         if (e.message === 'Forbidden' || e.message === 'NotLoggedIn') return;
         showToast('添加失败', 'error');
@@ -896,11 +928,14 @@ function switchTab(tabId) {
         }
         // 否则尝试加载后台数据
         adminView.classList.remove('hidden');
-        const tables = ['#logTable tbody', '#productTable tbody', '#adminOrderTable tbody', '#faqTable tbody'];
-        tables.forEach(sel => {
-            const el = document.querySelector(sel);
-            if (el) el.innerHTML = '<tr><td colspan="10" style="text-align:center;">加载中...</td></tr>';
-        });
+        // 只有在没有缓存时才显示"加载中..."
+        if (!adminDataCache.loaded) {
+            const tables = ['#logTable tbody', '#productTable tbody', '#adminOrderTable tbody', '#faqTable tbody'];
+            tables.forEach(sel => {
+                const el = document.querySelector(sel);
+                if (el) el.innerHTML = '<tr><td colspan="10" style="text-align:center;">加载中...</td></tr>';
+            });
+        }
         loadAdminData().catch(err => console.error(err));
     }
 }
@@ -991,16 +1026,15 @@ function init() {
         confirmAddAdminBtn.addEventListener('click', confirmAddAdmin);
     }
 
-    // 折叠按钮事件（仅绑定一次）
+    // 折叠按钮事件（平滑动画版本）
     const toggleLogBtn = document.getElementById('toggleLogBtn');
     if (toggleLogBtn && !toggleLogBtn._listener) {
         toggleLogBtn._listener = true;
         toggleLogBtn.addEventListener('click', function() {
             const container = document.getElementById('logContainer');
-            const arrow = document.getElementById('logArrow');
-            container.classList.toggle('hidden');
-            arrow.classList.toggle('fa-chevron-down');
-            arrow.classList.toggle('fa-chevron-right');
+            const isCollapsed = container.classList.contains('collapsed');
+            container.classList.toggle('collapsed');
+            toggleLogBtn.classList.toggle('collapsed');
         });
     }
     const toggleOrderBtn = document.getElementById('toggleOrderBtn');
@@ -1008,10 +1042,9 @@ function init() {
         toggleOrderBtn._listener = true;
         toggleOrderBtn.addEventListener('click', function() {
             const container = document.getElementById('orderContainer');
-            const arrow = document.getElementById('orderArrow');
-            container.classList.toggle('hidden');
-            arrow.classList.toggle('fa-chevron-down');
-            arrow.classList.toggle('fa-chevron-right');
+            const isCollapsed = container.classList.contains('collapsed');
+            container.classList.toggle('collapsed');
+            toggleOrderBtn.classList.toggle('collapsed');
         });
     }
 
