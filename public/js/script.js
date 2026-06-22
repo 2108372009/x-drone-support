@@ -612,31 +612,42 @@ window.deleteProduct = async (productId) => {
 async function loadAdminOrders() {
     if (adminAccessDenied) return;
     try {
-        const res = await fetchWithAdminToken(`${API_BASE}/api/admin/orders`);
-        const orders = await res.json();
+        const res = await fetchWithAdminToken(
+            `${API_BASE}/api/admin/orders?page=${adminOrdersPage}&page_size=${adminOrdersPageSize}`
+        );
+        const ordersData = await res.json();
         const tbody = document.querySelector('#adminOrderTable tbody');
         if (!tbody) return;
-        if (!orders.length) {
+        const items = ordersData.items || ordersData;
+        if (!items.length) {
             tbody.innerHTML = '<tr><td colspan="7">暂无订单</td></tr>';
-            return;
+        } else {
+            tbody.innerHTML = items.map(o => `
+                <tr>
+                    <td>${escapeHtml(o.order_id)}</td>
+                    <td>${escapeHtml(o.username)}</td>
+                    <td>${escapeHtml(o.product_name)}</td>
+                    <td>${o.quantity}</td>
+                    <td>${o.total_price}</td>
+                    <td><span class="order-status ${o.status}">${o.status}</span></td>
+                    <td>
+                        <select onchange="updateOrderStatus('${o.order_id}', this.value)">
+                            <option value="待发货" ${o.status==='待发货'?'selected':''}>待发货</option>
+                            <option value="运输中" ${o.status==='运输中'?'selected':''}>运输中</option>
+                            <option value="已送达" ${o.status==='已送达'?'selected':''}>已送达</option>
+                        </select>
+                    </td>
+                </tr>
+            `).join('');
         }
-        tbody.innerHTML = orders.map(o => `
-            <tr>
-                <td>${escapeHtml(o.order_id)}</td>
-                <td>${escapeHtml(o.username)}</td>
-                <td>${escapeHtml(o.product_name)}</td>
-                <td>${o.quantity}</td>
-                <td>${o.total_price}</td>
-                <td><span class="order-status ${o.status}">${o.status}</span></td>
-                <td>
-                    <select onchange="updateOrderStatus('${o.order_id}', this.value)">
-                        <option value="待发货" ${o.status==='待发货'?'selected':''}>待发货</option>
-                        <option value="运输中" ${o.status==='运输中'?'selected':''}>运输中</option>
-                        <option value="已送达" ${o.status==='已送达'?'selected':''}>已送达</option>
-                    </select>
-                </td>
-            </tr>
-        `).join('');
+        adminOrdersTotalPages = ordersData.total_pages || 1;
+        renderPagination(
+            'ordersPagination',
+            adminOrdersPage,
+            adminOrdersTotalPages,
+            () => { adminOrdersPage--; loadAdminOrders(); },
+            () => { adminOrdersPage++; loadAdminOrders(); }
+        );
     } catch(e) {
         if (e.message === 'Forbidden' || e.message === 'NotLoggedIn') return;
         console.error(e);
@@ -711,6 +722,36 @@ async function confirmAddAdmin() {
     }
 }
 
+// ==================== 分页状态 ====================
+let logsPage = 1;
+let logsPageSize = 20;
+let logsTotalPages = 1;
+
+let adminOrdersPage = 1;
+let adminOrdersPageSize = 20;
+let adminOrdersTotalPages = 1;
+
+// ==================== 分页导航渲染 ====================
+function renderPagination(containerId, currentPage, totalPages, onPrev, onNext) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    if (totalPages <= 1) {
+        container.innerHTML = '';
+        return;
+    }
+    container.innerHTML = `
+        <div style="display:flex; justify-content:center; align-items:center; gap:12px; margin-top:16px; padding:12px; background:#f8fafc; border-radius:12px;">
+            <button class="small" id="${containerId}-prev" ${currentPage <= 1 ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>⬅ 上一页</button>
+            <span style="color:#475569;">第 ${currentPage} / ${totalPages} 页</span>
+            <button class="small" id="${containerId}-next" ${currentPage >= totalPages ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>下一页 ➡</button>
+        </div>
+    `;
+    const prevBtn = document.getElementById(`${containerId}-prev`);
+    const nextBtn = document.getElementById(`${containerId}-next`);
+    if (prevBtn && currentPage > 1) prevBtn.onclick = onPrev;
+    if (nextBtn && currentPage < totalPages) nextBtn.onclick = onNext;
+}
+
 // ==================== 加载后台数据 ====================
 async function loadAdminData() {
     if (adminAccessDenied) {
@@ -719,18 +760,33 @@ async function loadAdminData() {
     }
 
     try {
-        const logsResp = await fetchWithAdminToken(`${API_BASE}/api/admin/conversations`);
-        const logs = await logsResp.json();
+        const logsResp = await fetchWithAdminToken(
+            `${API_BASE}/api/admin/conversations?page=${logsPage}&page_size=${logsPageSize}`
+        );
+        const logsData = await logsResp.json();
         const tbody = document.querySelector('#logTable tbody');
-        tbody.innerHTML = logs.map(l => `
-            <tr>
-                <td>${escapeHtml(formatLocalTime(l.timestamp))}</td>
-                <td>${escapeHtml(l.username || l.user_id)}</td>
-                <td>${escapeHtml(l.session_id)}</td>
-                <td>${escapeHtml(l.user_message)}</td>
-                <td>${escapeHtml(l.ai_reply)}</td>
-            </tr>
-        `).join('');
+        const items = logsData.items || logsData;
+        if (!items.length) {
+            tbody.innerHTML = '<tr><td colspan="5">暂无对话记录</td></tr>';
+        } else {
+            tbody.innerHTML = items.map(l => `
+                <tr>
+                    <td>${escapeHtml(formatLocalTime(l.timestamp))}</td>
+                    <td>${escapeHtml(l.username || l.user_id)}</td>
+                    <td>${escapeHtml(l.session_id)}</td>
+                    <td>${escapeHtml(l.user_message)}</td>
+                    <td>${escapeHtml(l.ai_reply)}</td>
+                </tr>
+            `).join('');
+        }
+        logsTotalPages = logsData.total_pages || 1;
+        renderPagination(
+            'logsPagination',
+            logsPage,
+            logsTotalPages,
+            () => { logsPage--; loadAdminData(); },
+            () => { logsPage++; loadAdminData(); }
+        );
     } catch(e) {
         if (e.message === 'Forbidden' || e.message === 'NotLoggedIn') {
             // 已由 fetchWithAdminToken 处理
@@ -936,12 +992,23 @@ function init() {
     }
 
     // 折叠按钮事件（仅绑定一次）
-    const toggleBtn = document.getElementById('toggleLogBtn');
-    if (toggleBtn && !toggleBtn._listener) {
-        toggleBtn._listener = true;
-        toggleBtn.addEventListener('click', function() {
+    const toggleLogBtn = document.getElementById('toggleLogBtn');
+    if (toggleLogBtn && !toggleLogBtn._listener) {
+        toggleLogBtn._listener = true;
+        toggleLogBtn.addEventListener('click', function() {
             const container = document.getElementById('logContainer');
             const arrow = document.getElementById('logArrow');
+            container.classList.toggle('hidden');
+            arrow.classList.toggle('fa-chevron-down');
+            arrow.classList.toggle('fa-chevron-right');
+        });
+    }
+    const toggleOrderBtn = document.getElementById('toggleOrderBtn');
+    if (toggleOrderBtn && !toggleOrderBtn._listener) {
+        toggleOrderBtn._listener = true;
+        toggleOrderBtn.addEventListener('click', function() {
+            const container = document.getElementById('orderContainer');
+            const arrow = document.getElementById('orderArrow');
             container.classList.toggle('hidden');
             arrow.classList.toggle('fa-chevron-down');
             arrow.classList.toggle('fa-chevron-right');

@@ -71,6 +71,7 @@
                 <thead><tr><th>时间</th><th>用户</th><th>会话ID</th><th>提问</th><th>AI回复</th></tr></thead>
                 <tbody></tbody>
             </table>
+            <div id="logsPagination"></div>
         </div>
 
         <h3><i class="fas fa-boxes"></i> 商品库存管理</h3>
@@ -100,9 +101,11 @@
             </div>
         </div>
 
-        <!-- 订单管理 -->
-        <h3><i class="fas fa-truck"></i> 订单管理</h3>
-        <div style="overflow-x:auto;">
+        <!-- 订单管理（折叠） -->
+        <h3 style="cursor:pointer;" id="toggleOrderBtn">
+            <i class="fas fa-chevron-down" id="orderArrow"></i> 订单管理
+        </h3>
+        <div id="orderContainer" style="overflow-x:auto;">
             <table id="adminOrderTable">
                 <thead>
                     <tr>
@@ -117,6 +120,7 @@
                 </thead>
                 <tbody></tbody>
             </table>
+            <div id="ordersPagination"></div>
         </div>
 
         <!-- 新增：管理员管理 -->

@@ -33,11 +33,29 @@ class CreateAdminRequest(BaseModel):
     password: str
 
 @router.get("/admin/conversations")
-async def get_conversations(user: User = Depends(verify_admin), db: Session = Depends(get_db)):
-    records = db.query(Conversation, User.username).outerjoin(User, Conversation.user_id == User.id).order_by(Conversation.timestamp.desc()).limit(50).all()
-    result = []
+async def get_conversations(
+    page: int = 1,
+    page_size: int = 20,
+    user: User = Depends(verify_admin),
+    db: Session = Depends(get_db)
+):
+    page = max(1, page)
+    page_size = max(1, min(page_size, 100))
+    offset = (page - 1) * page_size
+
+    total = db.query(Conversation).count()
+    records = (
+        db.query(Conversation, User.username)
+        .outerjoin(User, Conversation.user_id == User.id)
+        .order_by(Conversation.timestamp.desc())
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
+
+    items = []
     for conv, username in records:
-        result.append({
+        items.append({
             "timestamp": conv.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
             "user_id": conv.user_id,
             "username": username or "游客",
@@ -45,7 +63,14 @@ async def get_conversations(user: User = Depends(verify_admin), db: Session = De
             "user_message": conv.user_message,
             "ai_reply": conv.ai_reply
         })
-    return result
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size
+    }
 
 @router.get("/admin/faqs")
 async def get_faqs(user: User = Depends(verify_admin), db: Session = Depends(get_db)):
@@ -121,11 +146,28 @@ async def delete_product(product_id: str, user: User = Depends(verify_admin), db
     return {"message": "商品已下架删除"}
 
 @router.get("/admin/orders")
-async def get_all_orders(user: User = Depends(verify_admin), db: Session = Depends(get_db)):
-    orders = db.query(Order, User.username).join(User, Order.user_id == User.id).order_by(Order.created_at.desc()).limit(100).all()
-    result = []
+async def get_all_orders(
+    page: int = 1,
+    page_size: int = 20,
+    user: User = Depends(verify_admin),
+    db: Session = Depends(get_db)
+):
+    page = max(1, page)
+    page_size = max(1, min(page_size, 100))
+    offset = (page - 1) * page_size
+
+    total = db.query(Order).count()
+    orders = (
+        db.query(Order, User.username)
+        .join(User, Order.user_id == User.id)
+        .order_by(Order.created_at.desc())
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
+    items = []
     for order, username in orders:
-        result.append({
+        items.append({
             "order_id": order.id,
             "username": username,
             "product_name": order.product_name,
@@ -134,7 +176,14 @@ async def get_all_orders(user: User = Depends(verify_admin), db: Session = Depen
             "status": order.status,
             "created_at": order.created_at.strftime("%Y-%m-%d %H:%M:%S") if order.created_at else None
         })
-    return result
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size
+    }
 
 @router.patch("/admin/orders/{order_id}/status")
 async def update_order_status(order_id: str, update: OrderStatusUpdate, user: User = Depends(verify_admin), db: Session = Depends(get_db)):
