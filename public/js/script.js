@@ -766,8 +766,16 @@ function renderAdminDataFromCache() {
         'logsPagination',
         logsPage,
         logsTotalPages,
-        () => { logsPage--; loadAdminData(true); },
-        () => { logsPage++; loadAdminData(true); }
+        () => { 
+            if (logsPage <= 1) return; // 边界检查
+            logsPage--; 
+            loadAdminData(true); 
+        },
+        () => { 
+            if (logsPage >= logsTotalPages) return; // 边界检查
+            logsPage++; 
+            loadAdminData(true); 
+        }
     );
 
     // 渲染FAQ
@@ -840,8 +848,16 @@ function renderOrdersFromCache() {
         'ordersPagination',
         adminOrdersPage,
         adminOrdersTotalPages,
-        () => { adminOrdersPage--; loadAdminData(true); },
-        () => { adminOrdersPage++; loadAdminData(true); }
+        () => { 
+            if (adminOrdersPage <= 1) return; // 边界检查
+            adminOrdersPage--; 
+            loadAdminData(true); 
+        },
+        () => { 
+            if (adminOrdersPage >= adminOrdersTotalPages) return; // 边界检查
+            adminOrdersPage++; 
+            loadAdminData(true); 
+        }
     );
 }
 
