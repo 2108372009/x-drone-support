@@ -11,10 +11,8 @@ from .db import User
 
 import bcrypt
 
-# 安全修复：强制要求配置JWT密钥
-SECRET_KEY = os.getenv("JWT_SECRET")
-if not SECRET_KEY:
-    raise ValueError("⚠️ 安全警告：必须在环境变量中设置 JWT_SECRET！请参考 .env.example 文件配置")
+# 安全修复：JWT密钥从环境变量读取（运行时检查，避免Railway构建阶段报错）
+SECRET_KEY = os.getenv("JWT_SECRET", "")
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
 
@@ -46,7 +44,13 @@ def verify_password(plain_password: str, stored_hash: str) -> bool:
 def is_legacy_hash(stored_hash: str) -> bool:
     return bool(stored_hash) and not stored_hash.startswith("$2b$") and len(stored_hash) == 64
 
+def _ensure_secret_key():
+    """运行时检查JWT密钥是否已配置"""
+    if not SECRET_KEY:
+        raise HTTPException(status_code=500, detail="服务器配置错误：JWT_SECRET 未设置")
+
 def create_token(user_id: str, username: str) -> str:
+    _ensure_secret_key()
     now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id,
@@ -57,6 +61,7 @@ def create_token(user_id: str, username: str) -> str:
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 def get_current_user(authorization: str = Header(None), db: Session = Depends(get_db)) -> User:
+    _ensure_secret_key()
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="缺少认证")
     token = authorization.split(" ", 1)[1]

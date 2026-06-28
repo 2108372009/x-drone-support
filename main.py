@@ -19,16 +19,19 @@ from api.shop import router as shop_router
 from api.db import Product, User
 from api.auth import hash_password
 
-# 安全修复：强制要求配置管理员密码
-INIT_ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
-INIT_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
-
-if not INIT_ADMIN_USERNAME or not INIT_ADMIN_PASSWORD:
-    raise ValueError("⚠️ 安全警告：必须在环境变量中设置 ADMIN_USERNAME 和 ADMIN_PASSWORD！请参考 .env.example 文件配置")
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 正在启动服务...")
+    
+    # 安全修复：运行时检查环境变量（避免Railway构建阶段报错）
+    init_admin_username = os.getenv("ADMIN_USERNAME")
+    init_admin_password = os.getenv("ADMIN_PASSWORD")
+    
+    if not init_admin_username or not init_admin_password:
+        print("⚠️ 安全警告：必须在环境变量中设置 ADMIN_USERNAME 和 ADMIN_PASSWORD")
+        print("⚠️ 请参考 .env.example 文件配置后重新部署")
+        # 不抛出异常，让服务继续启动，但记录警告
+    
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
@@ -45,20 +48,24 @@ async def lifespan(app: FastAPI):
             db.commit()
             print("✅ 商品数据初始化完成")
 
-        admin_exists = db.query(User).filter(User.role == "admin").first()
-        if not admin_exists:
-            admin = User(
-                id=f"usr_{uuid.uuid4().hex[:12]}",
-                username=INIT_ADMIN_USERNAME,
-                password_hash=hash_password(INIT_ADMIN_PASSWORD),
-                is_guest="0",
-                role="admin"
-            )
-            db.add(admin)
-            db.commit()
-            print(f"✅ 初始管理员创建成功：{INIT_ADMIN_USERNAME}")
+        # 只有在配置了管理员账号时才创建
+        if init_admin_username and init_admin_password:
+            admin_exists = db.query(User).filter(User.role == "admin").first()
+            if not admin_exists:
+                admin = User(
+                    id=f"usr_{uuid.uuid4().hex[:12]}",
+                    username=init_admin_username,
+                    password_hash=hash_password(init_admin_password),
+                    is_guest="0",
+                    role="admin"
+                )
+                db.add(admin)
+                db.commit()
+                print(f"✅ 初始管理员创建成功：{init_admin_username}")
+            else:
+                print("✅ 管理员已存在，跳过创建")
         else:
-            print("✅ 管理员已存在，跳过创建")
+            print("⚠️ 未配置管理员账号，跳过创建")
 
         try:
             from sqlalchemy import text
