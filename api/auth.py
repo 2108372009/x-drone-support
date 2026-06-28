@@ -86,11 +86,11 @@ def verify_admin(current_user: User = Depends(get_current_user), db: Session = D
 
 @router.post("/register")
 def register(req: RegisterRequest, db: Session = Depends(get_db)):
-    # 密码长度验证：6-10位
+    # 密码长度验证：6-20位
     if len(req.password) < 6:
         raise HTTPException(status_code=400, detail="密码太短了亲，至少需要6位哦～")
-    if len(req.password) > 10:
-        raise HTTPException(status_code=400, detail="密码太长了亲，最多只能10位哦～")
+    if len(req.password) > 20:
+        raise HTTPException(status_code=400, detail="密码太长了亲，最多只能20位哦～")
     if req.password != req.confirm_password:
         raise HTTPException(status_code=400, detail="两次输入的密码不一致")
     existing = db.query(User).filter(User.username == req.username).first()

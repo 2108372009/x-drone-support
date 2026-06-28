@@ -415,7 +415,7 @@ async function handleRegister() {
         return;
     }
 
-    // 检查密码长度：6-10位
+    // 检查密码长度：6-20位（管理员密码可以更长）
     if (!password) {
         showToast('请输入密码', 'warning');
         return;
@@ -424,8 +424,8 @@ async function handleRegister() {
         showToast('密码太短了亲，至少需要6位哦～', 'warning');
         return;
     }
-    if (password.length > 10) {
-        showToast('密码太长了亲，最多只能10位哦～', 'warning');
+    if (password.length > 20) {
+        showToast('密码太长了亲，最多只能20位哦～', 'warning');
         return;
     }
     if (password !== confirm) {
