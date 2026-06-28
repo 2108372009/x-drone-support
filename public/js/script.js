@@ -66,6 +66,27 @@ function formatLocalTime(utcString) {
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
+function copyToClipboard(text) {
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('已复制到剪贴板', 'success');
+    }).catch(() => {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand('copy');
+            showToast('已复制到剪贴板', 'success');
+        } catch (e) {
+            showToast('复制失败，请手动复制', 'error');
+        }
+        document.body.removeChild(textarea);
+    });
+}
+
 function requireLogin() {
     if (!currentToken) {
         showToast('请先注册/登录账号再进行此操作', 'warning');
@@ -126,7 +147,7 @@ function goToChat() {
 // ==================== 客服模块 ====================
 function addMessage(role, text, isUser = false) {
     const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${isUser ? 'user' : 'ai'}`;
+    messageDiv.className = `message ${isUser ? 'user' : 'ai'} ${isUser ? 'slide-in-right' : 'slide-in-left'}`;
     const avatar = isUser ? '<i class="fas fa-user"></i>' : '<i class="fas fa-robot"></i>';
     const time = getCurrentTime();
     messageDiv.innerHTML = `
@@ -192,6 +213,11 @@ function showToast(message, type = 'error', duration = 3000) {
 async function sendMessage() {
     let msg = userInput.value.trim();
     if (!msg) return;
+    
+    if (chatBox.querySelector('.chat-empty-state')) {
+        chatBox.innerHTML = '';
+    }
+    
     addMessage('user', msg, true);
     userInput.value = '';
     userInput.style.height = 'auto';
@@ -234,8 +260,8 @@ function newSession() {
 
 function sendWelcomeMessage() {
     if (chatBox.children.length > 0) return;
-    const welcomeMsg = `亲，您好！我是X-Drone售后专家小智 🤖。请问您遇到什么问题了？\n• 产品参数与价格\n• 故障代码排查\n• 保修政策与X-Care\n• 飞行安全建议\n• 开箱与物流问题\n我会尽力帮您解答～`;
-    addMessage('ai', welcomeMsg, false);
+    chatBox.innerHTML = createChatEmptyState();
+    chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 // ==================== 历史对话 ====================
@@ -281,15 +307,33 @@ async function loadProducts() {
         const products = await res.json();
         const container = document.getElementById('productList');
         if (!container) return;
-        container.innerHTML = products.map(p => `
-            <div class="product-card">
+        
+        const hasCache = productsCache !== null;
+        productsCache = products;
+        
+        if (!products.length) {
+            container.innerHTML = createEmptyState(
+                '📦',
+                '暂无商品',
+                '商城还没有上架商品，敬请期待～',
+                '去问问小智',
+                "switchTab('chat')"
+            );
+            return;
+        }
+        
+        const animationClass = hasCache ? '' : 'stagger-item fade-in-up';
+        const animationDelay = hasCache ? '' : 'style="animation-delay: ${index * 0.05}s;"';
+        
+        container.innerHTML = products.map((p, index) => `
+            <div class="product-card card-hover ${animationClass}" ${!hasCache ? `style="animation-delay: ${index * 0.05}s;"` : ''}>
                 <h4>${escapeHtml(p.name)}</h4>
                 <p>${escapeHtml(p.description)}</p>
                 <div class="price">${p.price}</div>
                 <div class="stock">库存: ${p.stock}</div>
                 <div class="buy-action">
                     <input type="number" min="1" max="${p.stock}" value="1" id="qty-${p.id}" ${p.stock===0?'disabled':''}>
-                    <button class="buy-btn" data-id="${p.id}" ${p.stock===0?'disabled':''}>购买</button>
+                    <button class="buy-btn btn-ripple" data-id="${p.id}" ${p.stock===0?'disabled':''}>购买</button>
                 </div>
             </div>
         `).join('');
@@ -300,7 +344,19 @@ async function loadProducts() {
                 buyProduct(productId);
             });
         });
-    } catch(e) { console.error(e); }
+    } catch(e) { 
+        console.error(e); 
+        const container = document.getElementById('productList');
+        if (container && !productsCache) {
+            container.innerHTML = createEmptyState(
+                '😢',
+                '加载失败',
+                '商品数据加载失败，请检查网络连接后重试～',
+                '重新加载',
+                'loadProducts()'
+            );
+        }
+    }
 }
 
 async function buyProduct(productId) {
@@ -330,7 +386,13 @@ async function buyProduct(productId) {
 // ==================== 订单模块 ====================
 async function loadOrders() {
     if (!requireLogin()) {
-        document.getElementById('ordersList').innerHTML = '<p>请先登录查看订单</p>';
+        document.getElementById('ordersList').innerHTML = createEmptyState(
+            '🔒',
+            '请先登录',
+            '登录后即可查看您的订单记录～',
+            '去登录',
+            'showLoginModal()'
+        );
         return;
     }
     try {
@@ -338,20 +400,53 @@ async function loadOrders() {
         if (!res.ok) throw new Error('加载失败');
         const orders = await res.json();
         const container = document.getElementById('ordersList');
-        if (!orders.length) { container.innerHTML = '<p>暂无订单</p>'; return; }
-        container.innerHTML = orders.map(o => {
+        
+        const hasCache = ordersCache !== null;
+        ordersCache = orders;
+        
+        if (!orders.length) { 
+            container.innerHTML = createEmptyState(
+                '🛒',
+                '暂无订单',
+                '您还没有任何订单，快去商城选购心仪的商品吧～',
+                '去逛逛',
+                "switchTab('shop')"
+            );
+            return; 
+        }
+        
+        const animationClass = hasCache ? '' : 'stagger-item fade-in-up';
+        
+        container.innerHTML = orders.map((o, index) => {
             const dateStr = o.created_at || '时间未知';
+            const orderId = o.id || o.order_id || '';
             return `
-                <div class="order-item">
+                <div class="order-item card-hover ${animationClass}" ${!hasCache ? `style="animation-delay: ${index * 0.08}s;"` : ''}>
+                    <div class="order-id-row">
+                        <span class="order-id-label">订单号：</span>
+                        <span class="order-id-text" title="点击复制" onclick="copyToClipboard('${orderId}')">${escapeHtml(orderId)}</span>
+                        <i class="far fa-copy copy-icon" title="点击复制" onclick="copyToClipboard('${orderId}')"></i>
+                    </div>
                     <div><strong>${escapeHtml(o.product_name)}</strong> × ${o.quantity}</div>
                     <div>总价 ${o.total_price}</div>
                     <div>状态：<span class="order-status ${o.status}">${escapeHtml(o.status)}</span></div>
                     <div>${dateStr}</div>
-                    ${o.status !== '已取消' ? `<button onclick="cancelOrder('${o.id}')">取消订单</button>` : ''}
+                    ${o.status !== '已取消' ? `<button class="btn-ripple" onclick="cancelOrder('${o.id}')">取消订单</button>` : ''}
                 </div>
             `;
         }).join('');
-    } catch(e) { console.error(e); document.getElementById('ordersList').innerHTML = '<p>加载失败，请重试</p>'; }
+    } catch(e) { 
+        console.error(e); 
+        if (!ordersCache) {
+            document.getElementById('ordersList').innerHTML = createEmptyState(
+                '😢',
+                '加载失败',
+                '订单数据加载失败，请检查网络连接后重试～',
+                '重新加载',
+                'loadOrders()'
+            );
+        }
+    }
 }
 
 window.cancelOrder = async (orderId) => {
@@ -398,6 +493,232 @@ async function handleLogin() {
             showToast('登录失败：' + (err.detail || '用户名或密码错误'), 'error');
         }
     } catch(e) { showToast('网络错误，请检查网络连接', 'error'); }
+}
+
+// ==================== 表单验证函数 ====================
+
+// 用户名检查状态
+let usernameCheckTimeout = null;
+let usernameAvailable = null;
+
+// 密码强度检查
+function checkPasswordStrength(password) {
+    const strengthFill = document.getElementById('strengthFill');
+    const strengthText = document.getElementById('strengthText');
+    const reqLength = document.getElementById('reqLength');
+    const reqLetter = document.getElementById('reqLetter');
+    const reqNumber = document.getElementById('reqNumber');
+    
+    const checks = {
+        length: password.length >= 6 && password.length <= 20,
+        letter: /[a-zA-Z]/.test(password),
+        number: /\d/.test(password)
+    };
+    
+    // 更新要求清单
+    const isEmpty = password.length === 0;
+    
+    reqLength.className = 'requirement ' + (isEmpty ? '' : (checks.length ? 'met' : 'unmet'));
+    reqLength.querySelector('i').className = isEmpty ? 'far fa-circle' : (checks.length ? 'fas fa-check-circle' : 'fas fa-times-circle');
+    
+    reqLetter.className = 'requirement ' + (isEmpty ? '' : (checks.letter ? 'met' : 'unmet'));
+    reqLetter.querySelector('i').className = isEmpty ? 'far fa-circle' : (checks.letter ? 'fas fa-check-circle' : 'fas fa-times-circle');
+    
+    reqNumber.className = 'requirement ' + (isEmpty ? '' : (checks.number ? 'met' : 'unmet'));
+    reqNumber.querySelector('i').className = isEmpty ? 'far fa-circle' : (checks.number ? 'fas fa-check-circle' : 'fas fa-times-circle');
+    
+    // 计算强度
+    const passedChecks = Object.values(checks).filter(Boolean).length;
+    let strength = '';
+    let level = '';
+    
+    if (password.length === 0) {
+        strengthFill.className = 'strength-fill';
+        strengthText.className = 'strength-text';
+        strengthText.textContent = '';
+        return { passed: false, level: '' };
+    } else if (passedChecks === 1) {
+        strength = '弱';
+        level = 'weak';
+    } else if (passedChecks === 2) {
+        strength = '中等';
+        level = 'medium';
+    } else if (passedChecks === 3) {
+        strength = '强';
+        level = 'strong';
+    }
+    
+    strengthFill.className = 'strength-fill ' + level;
+    strengthText.className = 'strength-text ' + level;
+    strengthText.textContent = password.length > 0 ? '强度：' + strength : '';
+    
+    return { passed: passedChecks === 3, level };
+}
+
+// 用户名实时检查
+function checkUsernameAvailability(username) {
+    const input = document.getElementById('regUsername');
+    const feedback = document.getElementById('usernameFeedback');
+    
+    // 清除之前的检查
+    if (usernameCheckTimeout) clearTimeout(usernameCheckTimeout);
+    
+    // 清除状态
+    input.classList.remove('valid', 'invalid', 'checking');
+    feedback.classList.remove('show', 'success', 'error', 'loading');
+    feedback.innerHTML = '';
+    usernameAvailable = null;
+    
+    // 验证格式
+    if (!username) return;
+    
+    if (username.length < 3) {
+        input.classList.add('invalid');
+        feedback.className = 'field-feedback show error';
+        feedback.innerHTML = '<i class="fas fa-exclamation-circle"></i> 用户名至少需要3个字符';
+        usernameAvailable = false;
+        return;
+    }
+    
+    if (username.length > 20) {
+        input.classList.add('invalid');
+        feedback.className = 'field-feedback show error';
+        feedback.innerHTML = '<i class="fas fa-exclamation-circle"></i> 用户名最多20个字符';
+        usernameAvailable = false;
+        return;
+    }
+    
+    if (!/^[\u4e00-\u9fa5a-zA-Z0-9_]+$/.test(username)) {
+        input.classList.add('invalid');
+        feedback.className = 'field-feedback show error';
+        feedback.innerHTML = '<i class="fas fa-exclamation-circle"></i> 只能包含中文、字母、数字和下划线';
+        usernameAvailable = false;
+        return;
+    }
+    
+    // 格式正确，开始检查可用性
+    input.classList.add('checking');
+    feedback.className = 'field-feedback show loading';
+    feedback.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 检查中...';
+    
+    // 防抖：300ms后再检查
+    usernameCheckTimeout = setTimeout(async () => {
+        try {
+            const res = await fetch(`${API_BASE}/api/auth/check-username`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username })
+            });
+            
+            const data = await res.json();
+            
+            if (data.available) {
+                input.classList.remove('checking');
+                input.classList.add('valid');
+                feedback.className = 'field-feedback show success';
+                feedback.innerHTML = '<i class="fas fa-check-circle"></i> ✓ 用户名可用';
+                usernameAvailable = true;
+            } else {
+                input.classList.remove('checking');
+                input.classList.add('invalid');
+                feedback.className = 'field-feedback show error';
+                feedback.innerHTML = '<i class="fas fa-exclamation-circle"></i> 该昵称已被占用，换一个试试呢～';
+                usernameAvailable = false;
+            }
+        } catch (error) {
+            console.error('Username check failed:', error);
+            // 网络错误时不清除检查状态
+            input.classList.remove('checking');
+        }
+    }, 300);
+}
+
+// 确认密码实时检查
+function checkConfirmPassword() {
+    const password = document.getElementById('regPassword').value;
+    const confirm = document.getElementById('regConfirmPassword').value;
+    const input = document.getElementById('regConfirmPassword');
+    const feedback = document.getElementById('confirmPasswordFeedback');
+    
+    if (!confirm) {
+        input.classList.remove('valid', 'invalid');
+        feedback.classList.remove('show');
+        feedback.innerHTML = '';
+        return false;
+    }
+    
+    if (confirm === password && password.length >= 6) {
+        input.classList.remove('invalid');
+        input.classList.add('valid');
+        feedback.className = 'field-feedback show success';
+        feedback.innerHTML = '<i class="fas fa-check-circle"></i> ✓ 密码一致';
+        return true;
+    } else {
+        input.classList.remove('valid');
+        input.classList.add('invalid');
+        feedback.className = 'field-feedback show error';
+        if (password.length < 6) {
+            feedback.innerHTML = '<i class="fas fa-exclamation-circle"></i> 请先设置符合要求的密码';
+        } else {
+            feedback.innerHTML = '<i class="fas fa-exclamation-circle"></i> 两次密码不一致';
+        }
+        return false;
+    }
+}
+
+// 检查注册表单是否全部通过
+function isRegisterFormValid() {
+    const username = document.getElementById('regUsername').value.trim();
+    const password = document.getElementById('regPassword').value;
+    const confirm = document.getElementById('regConfirmPassword').value;
+    
+    const passwordValid = password.length >= 6 && password.length <= 20 &&
+                         /[a-zA-Z]/.test(password) && /\d/.test(password);
+    const passwordsMatch = password === confirm && confirm.length > 0;
+    
+    return username.length >= 3 && username.length <= 20 &&
+           /^[a-zA-Z0-9_]+$/.test(username) &&
+           usernameAvailable === true &&
+           passwordValid && passwordsMatch;
+}
+
+let registerValidationInited = false;
+
+// 初始化注册表单验证事件
+function initRegisterValidation() {
+    if (registerValidationInited) return;
+    
+    const usernameInput = document.getElementById('regUsername');
+    const passwordInput = document.getElementById('regPassword');
+    const confirmInput = document.getElementById('regConfirmPassword');
+    
+    // 用户名实时检查
+    usernameInput.addEventListener('input', (e) => {
+        checkUsernameAvailability(e.target.value.trim());
+    });
+    
+    usernameInput.addEventListener('blur', (e) => {
+        // 失去焦点时如果未检查则检查一次
+        if (!usernameAvailable && e.target.value.trim()) {
+            checkUsernameAvailability(e.target.value.trim());
+        }
+    });
+    
+    // 密码实时检查
+    passwordInput.addEventListener('input', (e) => {
+        checkPasswordStrength(e.target.value);
+        // 如果确认密码已有值，也更新确认状态
+        if (confirmInput.value) {
+            checkConfirmPassword();
+        }
+    });
+    
+    // 确认密码实时检查
+    confirmInput.addEventListener('input', () => {
+        checkConfirmPassword();
+    });
+    
+    registerValidationInited = true;
 }
 
 async function handleRegister() {
@@ -890,10 +1211,10 @@ function renderAdminDataFromCache() {
     const logsData = adminDataCache.logs;
     const logItems = logsData?.items || [];
     if (!logItems.length) {
-        logTbody.innerHTML = '<tr><td colspan="5">暂无对话记录</td></tr>';
+        logTbody.innerHTML = '<tr><td colspan="5" style="padding: 40px 0; color: #94a3b8; text-align: center;">暂无对话记录</td></tr>';
     } else {
-        logTbody.innerHTML = logItems.map(l => `
-            <tr>
+        logTbody.innerHTML = logItems.map((l, i) => `
+            <tr style="animation-delay: ${i * 0.03}s;" class="fade-in-up">
                 <td>${escapeHtml(formatLocalTime(l.timestamp))}</td>
                 <td>${escapeHtml(l.username || l.user_id)}</td>
                 <td>${escapeHtml(l.session_id)}</td>
@@ -907,12 +1228,12 @@ function renderAdminDataFromCache() {
         logsPage,
         logsTotalPages,
         () => { 
-            if (logsPage <= 1) return; // 边界检查
+            if (logsPage <= 1) return;
             logsPage--; 
             loadAdminData(true); 
         },
         () => { 
-            if (logsPage >= logsTotalPages) return; // 边界检查
+            if (logsPage >= logsTotalPages) return;
             logsPage++; 
             loadAdminData(true); 
         }
@@ -921,13 +1242,17 @@ function renderAdminDataFromCache() {
     // 渲染FAQ
     const faqBody = document.querySelector('#faqTable tbody');
     const faqs = adminDataCache.faqs || [];
-    faqBody.innerHTML = faqs.map(f => `
-        <tr>
-            <td>${escapeHtml(f.question)}</td>
-            <td>${escapeHtml(f.answer)}</td>
-            <td><button class="delete-btn" onclick="deleteFaq('${f.question.replace(/'/g, "\\'")}')">删除</button></td>
-        </tr>
-    `).join('');
+    if (!faqs.length) {
+        faqBody.innerHTML = '<tr><td colspan="3" style="padding: 40px 0; color: #94a3b8; text-align: center;">暂无FAQ，请添加常用问题</td></tr>';
+    } else {
+        faqBody.innerHTML = faqs.map((f, i) => `
+            <tr style="animation-delay: ${i * 0.03}s;" class="fade-in-up">
+                <td>${escapeHtml(f.question)}</td>
+                <td>${escapeHtml(f.answer)}</td>
+                <td><button class="delete-btn btn-ripple" onclick="deleteFaq('${f.question.replace(/'/g, "\\'")}')">删除</button></td>
+            </tr>
+        `).join('');
+    }
 
     // 渲染商品
     renderProductsFromCache();
@@ -940,20 +1265,20 @@ function renderProductsFromCache() {
     const tbody = document.querySelector('#productTable tbody');
     const products = adminDataCache.products || [];
     if (!products.length) {
-        tbody.innerHTML = '<tr><td colspan="5">暂无商品，请点击"上架新产品"添加</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="padding: 40px 0; color: #94a3b8; text-align: center;">暂无商品，请点击"上架新产品"添加</td></tr>';
         return;
     }
-    tbody.innerHTML = products.map(p => `
-        <tr>
+    tbody.innerHTML = products.map((p, i) => `
+        <tr style="animation-delay: ${i * 0.03}s;" class="fade-in-up">
             <td>${escapeHtml(p.name)}</td>
             <td>${p.price}</td>
             <td id="stock-${p.id}">${p.stock}</td>
             <td>
-                <button class="small" onclick="adjustStock('${p.id}', 1)">+1</button>
-                <button class="small" onclick="adjustStock('${p.id}', -1)">-1</button>
-                <button class="small" onclick="adjustStock('${p.id}', 10)">+10</button>
-                <button class="small" onclick="adjustStock('${p.id}', -10)">-10</button>
-                <button class="small" style="background:#dc3545; margin-left:8px;" onclick="deleteProduct('${p.id}')">下架</button>
+                <button class="small btn-ripple" onclick="adjustStock('${p.id}', 1)">+1</button>
+                <button class="small btn-ripple" onclick="adjustStock('${p.id}', -1)">-1</button>
+                <button class="small btn-ripple" onclick="adjustStock('${p.id}', 10)">+10</button>
+                <button class="small btn-ripple" onclick="adjustStock('${p.id}', -10)">-10</button>
+                <button class="small btn-ripple" style="background:#dc3545; margin-left:8px;" onclick="deleteProduct('${p.id}')">下架</button>
               </td>
         </tr>
     `).join('');
@@ -964,10 +1289,10 @@ function renderOrdersFromCache() {
     const ordersData = adminDataCache.orders || {};
     const items = ordersData.items || [];
     if (!items.length) {
-        tbody.innerHTML = '<tr><td colspan="7">暂无订单</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="padding: 40px 0; color: #94a3b8; text-align: center;">暂无订单</td></tr>';
     } else {
-        tbody.innerHTML = items.map(o => `
-            <tr>
+        tbody.innerHTML = items.map((o, i) => `
+            <tr style="animation-delay: ${i * 0.03}s;" class="fade-in-up">
                 <td>${escapeHtml(o.order_id)}</td>
                 <td>${escapeHtml(o.username)}</td>
                 <td>${escapeHtml(o.product_name)}</td>
@@ -989,12 +1314,12 @@ function renderOrdersFromCache() {
         adminOrdersPage,
         adminOrdersTotalPages,
         () => { 
-            if (adminOrdersPage <= 1) return; // 边界检查
+            if (adminOrdersPage <= 1) return;
             adminOrdersPage--; 
             loadAdminData(true); 
         },
         () => { 
-            if (adminOrdersPage >= adminOrdersTotalPages) return; // 边界检查
+            if (adminOrdersPage >= adminOrdersTotalPages) return;
             adminOrdersPage++; 
             loadAdminData(true); 
         }
@@ -1042,6 +1367,125 @@ window.addFaq = async function() {
     }
 };
 
+// ==================== 骨架屏生成函数 ====================
+function createChatSkeleton(count = 3) {
+    let html = '';
+    for (let i = 0; i < count; i++) {
+        const isUser = i % 2 === 1;
+        html += `
+            <div class="skeleton-message ${isUser ? 'user' : ''}">
+                <div class="skeleton-avatar"></div>
+                <div class="skeleton-bubble">
+                    <div class="skeleton skeleton-text ${i === 0 ? 'long' : isUser ? 'medium' : 'long'}"></div>
+                    <div class="skeleton skeleton-text ${isUser ? 'short' : 'medium'}" style="margin-bottom: 0;"></div>
+                </div>
+            </div>
+        `;
+    }
+    return html;
+}
+
+function createProductSkeleton(count = 6) {
+    let html = '';
+    for (let i = 0; i < count; i++) {
+        html += `
+            <div class="skeleton-product-card stagger-item fade-in-up">
+                <div class="skeleton-product-image"></div>
+                <div class="skeleton-product-title"></div>
+                <div class="skeleton-product-desc"></div>
+                <div class="skeleton-product-price"></div>
+                <div class="skeleton-product-stock"></div>
+                <div class="skeleton-product-button"></div>
+            </div>
+        `;
+    }
+    return html;
+}
+
+function createOrderSkeleton(count = 3) {
+    let html = '';
+    for (let i = 0; i < count; i++) {
+        html += `
+            <div class="skeleton-order-item stagger-item fade-in-up">
+                <div class="skeleton-order-line" style="width: 180px;"></div>
+                <div class="skeleton-order-line" style="width: 80px;"></div>
+                <div class="skeleton-order-line" style="width: 100px;"></div>
+                <div class="skeleton-order-line" style="width: 120px;"></div>
+                <div class="skeleton-order-line" style="width: 80px;"></div>
+            </div>
+        `;
+    }
+    return html;
+}
+
+function createTableSkeleton(colCount = 5, rowCount = 5) {
+    let html = '';
+    for (let i = 0; i < rowCount; i++) {
+        html += `<tr class="skeleton-table-row">`;
+        for (let j = 0; j < colCount; j++) {
+            html += `<td></td>`;
+        }
+        html += `</tr>`;
+    }
+    return html;
+}
+
+// ==================== 空状态生成函数 ====================
+function createEmptyState(icon, title, description, buttonText, buttonAction) {
+    return `
+        <div class="empty-state scale-in">
+            <div class="empty-state-icon float">${icon}</div>
+            <h3>${title}</h3>
+            <p>${description}</p>
+            ${buttonText ? `<button class="empty-state-btn" onclick="${buttonAction}">${buttonText}</button>` : ''}
+        </div>
+    `;
+}
+
+function createChatEmptyState() {
+    return `
+        <div class="chat-empty-state scale-in">
+            <div class="bot-avatar-large float">
+                <i class="fas fa-robot"></i>
+            </div>
+            <h3>你好，我是小智 👋</h3>
+            <p>有什么可以帮您的吗？<br>直接输入您的问题，我会尽力为您解答～</p>
+        </div>
+    `;
+}
+
+function sendQuickTip(msg) {
+    userInput.value = msg;
+    sendMessage();
+}
+
+let productsCache = null;
+let ordersCache = null;
+
+// ==================== 动画工具函数 ====================
+function animateListItems(containerSelector, animationClass = 'fade-in-up') {
+    const items = document.querySelectorAll(`${containerSelector} > *`);
+    items.forEach((item, index) => {
+        item.style.opacity = '0';
+        item.style.animation = 'none';
+        setTimeout(() => {
+            item.style.animation = '';
+            item.classList.add(animationClass);
+            item.classList.add('stagger-item');
+            item.style.animationDelay = `${index * 0.05}s`;
+        }, 10);
+    });
+}
+
+function addViewTransition(viewId) {
+    const view = document.getElementById(viewId);
+    if (view) {
+        view.classList.remove('view-transition');
+        void view.offsetWidth;
+        view.classList.add('view-transition');
+    }
+}
+
 // ==================== 页面切换 ====================
 function switchTab(tabId) {
     const chatMain = document.getElementById('chatMain');
@@ -1065,8 +1509,14 @@ function switchTab(tabId) {
 
     if (tabId === 'chat') {
         chatMain.classList.remove('hidden');
+        addViewTransition('chatMain');
     } else if (tabId === 'shop') {
         shopView.classList.remove('hidden');
+        addViewTransition('shopView');
+        const productList = document.getElementById('productList');
+        if (!productsCache && productList && productList.children.length === 0) {
+            productList.innerHTML = createProductSkeleton(6);
+        }
         loadProducts();
     } else if (tabId === 'orders') {
         if (!requireLogin()) {
@@ -1074,41 +1524,36 @@ function switchTab(tabId) {
             return;
         }
         ordersView.classList.remove('hidden');
+        addViewTransition('ordersView');
+        const ordersList = document.getElementById('ordersList');
+        if (!ordersCache && ordersList && ordersList.children.length === 0) {
+            ordersList.innerHTML = createOrderSkeleton(3);
+        }
         loadOrders();
     } else if (tabId === 'admin') {
-        // 先检查是否登录
         if (!requireLogin()) {
             switchTab('chat');
             return;
         }
-        // 如果已经被拒绝，直接提示并跳转
         if (adminAccessDenied) {
             showToast('用户权限不够无法访问', 'error');
             goToChat();
             return;
         }
-        // 否则尝试加载后台数据
         adminView.classList.remove('hidden');
+        addViewTransition('adminView');
         
-        // 判断是否需要强制刷新
-        // - 没有缓存时：需要刷新
-        // - 有缓存但标记为dirty时（聊天后）：刷新一次，然后清除dirty标记
         const needRefresh = !adminDataCache.loaded || adminDataCache.dirty;
         
-        // 只有在没有缓存时才显示"加载中..."
-        // 有缓存但dirty时，先显示旧缓存，然后静默刷新
         if (!adminDataCache.loaded) {
-            const tables = ['#logTable tbody', '#productTable tbody', '#adminOrderTable tbody', '#faqTable tbody'];
-            tables.forEach(sel => {
-                const el = document.querySelector(sel);
-                if (el) el.innerHTML = '<tr><td colspan="10" style="text-align:center;">加载中...</td></tr>';
-            });
+            document.querySelector('#adminOrderTable tbody').innerHTML = createTableSkeleton(7, 5);
+            document.querySelector('#productTable tbody').innerHTML = createTableSkeleton(4, 5);
+            document.querySelector('#logTable tbody').innerHTML = createTableSkeleton(5, 5);
+            document.querySelector('#faqTable tbody').innerHTML = createTableSkeleton(3, 5);
         }
         
-        // 加载数据
         if (needRefresh) {
             loadAdminData(true).then(() => {
-                // 刷新完成后清除dirty标记
                 adminDataCache.dirty = false;
             }).catch(err => console.error(err));
         } else {
@@ -1120,17 +1565,72 @@ function switchTab(tabId) {
 // ==================== 订单查询 ====================
 async function queryOrder() {
     const orderId = document.getElementById('orderIdInput').value.trim();
-    if (!orderId) { document.getElementById('orderResult').innerHTML = '<span style="color:red;">请输入订单号</span>'; return; }
-    document.getElementById('orderResult').innerHTML = '查询中...';
+    const resultDiv = document.getElementById('orderResult');
+    if (!orderId) { 
+        resultDiv.innerHTML = '<div style="color: #ef4444; text-align: center; padding: 20px;">请输入订单号</div>'; 
+        return; 
+    }
+    resultDiv.innerHTML = `
+        <div style="text-align: center; padding: 30px;">
+            <div style="display: inline-block; width: 40px; height: 40px; border: 3px solid #e2e8f0; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+            <p style="margin-top: 12px; color: #64748b;">查询中...</p>
+        </div>
+        <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+    `;
     try {
-        const res = await fetch(`${API_BASE}/api/order?order_id=${orderId}`);
-        const data = await res.json();
-        if (data.error) document.getElementById('orderResult').innerHTML = `<span style="color:red;">${data.error}</span>`;
-        else {
-            let html = `<div><p><strong>订单号：</strong>${data.order_id}</p><p><strong>状态：</strong>${data.status}</p><p><strong>产品：</strong>${data.product}</p><p><strong>金额：</strong>${data.amount}</p>${data.tracking_no ? `<p><strong>运单号：</strong>${data.tracking_no}</p>` : ''}</div>`;
-            document.getElementById('orderResult').innerHTML = html;
+        const res = await fetch(`${API_BASE}/api/shop/order/public/${encodeURIComponent(orderId)}`);
+        if (!res.ok) {
+            const errData = await res.json();
+            resultDiv.innerHTML = `
+                <div class="scale-in" style="text-align: center; padding: 30px;">
+                    <div style="font-size: 48px; margin-bottom: 12px;">😕</div>
+                    <h4 style="color: #475569; margin-bottom: 8px;">未找到订单</h4>
+                    <p style="color: #94a3b8; font-size: 0.9rem;">${errData.detail || '请检查订单号是否正确'}</p>
+                </div>
+            `;
+            return;
         }
-    } catch(e) { document.getElementById('orderResult').innerHTML = '<span style="color:red;">查询失败</span>'; }
+        const data = await res.json();
+        resultDiv.innerHTML = `
+            <div class="scale-in" style="background: #f8fafc; border-radius: 12px; padding: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;">
+                    <span style="font-weight: 600; color: #1e293b;">订单详情</span>
+                    <span class="order-status ${data.status}" style="padding: 4px 12px; border-radius: 20px; font-size: 0.85rem;">${data.status}</span>
+                </div>
+                <div style="display: grid; gap: 12px;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: #64748b;">订单号</span>
+                        <span style="font-weight: 500; color: #1e293b;">${data.order_id}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: #64748b;">商品名称</span>
+                        <span style="font-weight: 500; color: #1e293b;">${data.product_name}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: #64748b;">数量</span>
+                        <span style="font-weight: 500; color: #1e293b;">× ${data.quantity}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: #64748b;">总价</span>
+                        <span style="font-weight: 600; color: #dc2626;">${data.total_price}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: #64748b;">下单时间</span>
+                        <span style="color: #475569;">${data.created_at || '-'}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    } catch(e) { 
+        console.error(e);
+        resultDiv.innerHTML = `
+            <div class="scale-in" style="text-align: center; padding: 30px;">
+                <div style="font-size: 48px; margin-bottom: 12px;">😢</div>
+                <h4 style="color: #475569; margin-bottom: 8px;">查询失败</h4>
+                <p style="color: #94a3b8; font-size: 0.9rem;">网络错误，请稍后重试</p>
+            </div>
+        `;
+    }
 }
 
 // ==================== 事件绑定 ====================
@@ -1167,10 +1667,18 @@ function init() {
     safeAddEventListener('closeHistoryBtn', 'click', closeHistoryModal);
     safeAddEventListener('closeOrderBtn', 'click', closeOrderModal);
     safeAddEventListener('queryOrderBtn', 'click', queryOrder);
+    const orderIdInput = document.getElementById('orderIdInput');
+    if (orderIdInput) {
+        orderIdInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') queryOrder();
+        });
+    }
     safeAddEventListener('doLoginBtn', 'click', handleLogin);
     safeAddEventListener('showRegisterBtn', 'click', () => {
         document.getElementById('loginForm').style.display = 'none';
         document.getElementById('registerForm').style.display = 'block';
+        // 切换到注册表单时初始化验证
+        initRegisterValidation();
     });
     safeAddEventListener('doRegisterBtn', 'click', handleRegister);
     safeAddEventListener('backToLoginBtn', 'click', () => {

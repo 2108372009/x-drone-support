@@ -355,6 +355,41 @@ button.delete-btn { background: #dc3545; border: none; color: white; padding: 4p
     box-shadow: 0 4px 16px rgba(0,0,0,0.08);
     border-color: #e2e8f0;
 }
+.order-id-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: #64748b;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #f1f5f9;
+    margin-bottom: 4px;
+}
+.order-id-label {
+    color: #94a3b8;
+    flex-shrink: 0;
+}
+.order-id-text {
+    font-family: 'Courier New', monospace;
+    color: #475569;
+    cursor: pointer;
+    user-select: all;
+    transition: color 0.2s;
+}
+.order-id-text:hover {
+    color: #1e3c72;
+}
+.copy-icon {
+    cursor: pointer;
+    color: #94a3b8;
+    font-size: 0.8rem;
+    transition: color 0.2s;
+    flex-shrink: 0;
+}
+.copy-icon:hover {
+    color: #1e3c72;
+}
 .order-item button { 
     background: #dc2626; 
     border: none; 
@@ -519,3 +554,786 @@ button.delete-btn { background: #dc3545; border: none; color: white; padding: 4p
 }
 .error-toast.success { background: #10b981; box-shadow: 0 4px 24px rgba(16, 185, 129, 0.5); color: white; }
 .error-toast.warning { background: #f59e0b; box-shadow: 0 4px 24px rgba(245, 158, 11, 0.5); color: white; }
+
+/* ========== 骨架屏样式 ========== */
+.skeleton {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.5s infinite;
+    border-radius: 8px;
+}
+
+.skeleton-text {
+    height: 14px;
+    width: 100%;
+    margin-bottom: 10px;
+    border-radius: 4px;
+}
+
+.skeleton-text.short { width: 60%; }
+.skeleton-text.medium { width: 80%; }
+.skeleton-text.long { width: 100%; }
+
+@keyframes skeletonShimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* 聊天消息骨架屏 */
+.skeleton-message {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.skeleton-message.user {
+    flex-direction: row-reverse;
+    justify-content: flex-start;
+}
+
+.skeleton-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.5s infinite;
+}
+
+.skeleton-bubble {
+    background: white;
+    padding: 12px 18px;
+    border-radius: 20px;
+    flex: 1;
+    max-width: 70%;
+}
+
+.skeleton-message.user .skeleton-bubble {
+    background: linear-gradient(135deg, #e8edf5, #dce3ee);
+}
+
+/* 商品卡片骨架屏 */
+.skeleton-product-card {
+    background: white;
+    border-radius: 20px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    border: 1px solid #f1f5f9;
+}
+
+.skeleton-product-image {
+    width: 100%;
+    height: 120px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.5s infinite;
+}
+
+.skeleton-product-title {
+    height: 20px;
+    width: 80%;
+    margin-bottom: 8px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.5s infinite;
+}
+
+.skeleton-product-desc {
+    height: 14px;
+    width: 100%;
+    margin-bottom: 12px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.5s infinite;
+}
+
+.skeleton-product-price {
+    height: 24px;
+    width: 40%;
+    margin-bottom: 8px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.5s infinite;
+}
+
+.skeleton-product-stock {
+    height: 14px;
+    width: 30%;
+    margin-bottom: 16px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.5s infinite;
+}
+
+.skeleton-product-button {
+    height: 40px;
+    width: 100%;
+    border-radius: 25px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.5s infinite;
+}
+
+/* 订单列表骨架屏 */
+.skeleton-order-item {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    border: 1px solid #f1f5f9;
+}
+
+.skeleton-order-line {
+    height: 16px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.5s infinite;
+}
+
+/* 表格骨架屏 */
+.skeleton-table-row {
+    height: 48px;
+}
+
+.skeleton-table-row td {
+    background: linear-gradient(90deg, #f8f9fa 25%, #e9ecef 50%, #f8f9fa 75%);
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.5s infinite;
+    border: none;
+}
+
+/* ========== 空状态样式 ========== */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    text-align: center;
+}
+
+.empty-state-icon {
+    font-size: 64px;
+    margin-bottom: 20px;
+    opacity: 0.3;
+}
+
+.empty-state h3 {
+    font-size: 1.2rem;
+    color: #475569;
+    margin-bottom: 8px;
+}
+
+.empty-state p {
+    font-size: 0.9rem;
+    color: #94a3b8;
+    margin-bottom: 20px;
+    max-width: 300px;
+    line-height: 1.6;
+}
+
+.empty-state-btn {
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    color: white;
+    border: none;
+    padding: 12px 32px;
+    border-radius: 30px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s;
+    box-shadow: 0 4px 12px rgba(30, 60, 114, 0.3);
+}
+
+.empty-state-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(30, 60, 114, 0.4);
+}
+
+.empty-state-btn:active {
+    transform: scale(0.98);
+}
+
+/* 聊天区域空状态 */
+.chat-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    text-align: center;
+    flex: 1;
+}
+
+.chat-empty-state .bot-avatar-large {
+    width: 80px;
+    height: 80px;
+    background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 40px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 24px rgba(30, 60, 114, 0.3);
+}
+
+.chat-empty-state h3 {
+    font-size: 1.3rem;
+    color: #1e293b;
+    margin-bottom: 8px;
+}
+
+.chat-empty-state p {
+    font-size: 0.95rem;
+    color: #64748b;
+    margin-bottom: 24px;
+    line-height: 1.6;
+}
+
+.chat-empty-state .quick-tips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    max-width: 400px;
+}
+
+.chat-empty-state .quick-tip-btn {
+    background: white;
+    border: 1px solid #e2e8f0;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    color: var(--primary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.chat-empty-state .quick-tip-btn:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(30, 60, 114, 0.2);
+}
+
+/* ========== 微动效增强 ========== */
+
+/* 按钮点击涟漪效果 */
+.btn-ripple {
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-ripple::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: width 0.4s, height 0.4s;
+}
+
+.btn-ripple:active::after {
+    width: 200px;
+    height: 200px;
+    transition: width 0s, height 0s;
+}
+
+/* 卡片悬浮效果增强 */
+.card-hover {
+    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+                border-color 0.3s ease;
+}
+
+.card-hover:hover {
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 20px 40px rgba(30, 60, 114, 0.15);
+}
+
+/* 淡入上移动画 */
+.fade-in-up {
+    animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    opacity: 0;
+    transform: translateY(16px);
+}
+
+@keyframes fadeInUp {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 缩放弹入动画 */
+.scale-in {
+    animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    opacity: 0;
+    transform: scale(0.9);
+}
+
+@keyframes scaleIn {
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* 滑入动画 */
+.slide-in-left {
+    animation: slideInLeft 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    opacity: 0;
+    transform: translateX(-20px);
+}
+
+@keyframes slideInLeft {
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.slide-in-right {
+    animation: slideInRight 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    opacity: 0;
+    transform: translateX(20px);
+}
+
+@keyframes slideInRight {
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* 心跳脉冲动画 */
+.pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* 浮动动画 */
+.float {
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+/* 视图切换过渡 */
+.view-transition {
+    animation: viewFadeIn 0.3s ease;
+}
+
+@keyframes viewFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 表格行悬浮效果 */
+table tbody tr {
+    transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+table tbody tr:hover {
+    background-color: #f1f5f9 !important;
+    transform: scale(1.005);
+}
+
+/* 输入框聚焦效果增强 */
+.input-wrapper textarea:focus,
+input:focus,
+select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px rgba(0, 168, 255, 0.1),
+                0 2px 8px rgba(0, 168, 255, 0.1);
+    transform: translateY(-1px);
+}
+
+.input-wrapper textarea,
+input,
+select {
+    transition: border-color 0.2s ease,
+                box-shadow 0.2s ease,
+                transform 0.2s ease;
+}
+
+/* 标签页切换动画 */
+.tab {
+    position: relative;
+}
+
+.tab::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 50%;
+    width: 0;
+    height: 2px;
+    background: var(--primary);
+    transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    transform: translateX(-50%);
+}
+
+.tab:hover::after {
+    width: 60%;
+}
+
+.tab.active::after {
+    width: 80%;
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+    transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* 消息气泡悬浮效果 */
+.message .bubble {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.message:hover .bubble {
+    transform: scale(1.01);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* 订单状态徽章动效 */
+.order-status {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.order-item:hover .order-status {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 渐入延迟 - 列表项逐个出现 */
+.stagger-item:nth-child(1) { animation-delay: 0.05s; }
+.stagger-item:nth-child(2) { animation-delay: 0.1s; }
+.stagger-item:nth-child(3) { animation-delay: 0.15s; }
+.stagger-item:nth-child(4) { animation-delay: 0.2s; }
+.stagger-item:nth-child(5) { animation-delay: 0.25s; }
+.stagger-item:nth-child(6) { animation-delay: 0.3s; }
+.stagger-item:nth-child(7) { animation-delay: 0.35s; }
+.stagger-item:nth-child(8) { animation-delay: 0.4s; }
+.stagger-item:nth-child(9) { animation-delay: 0.45s; }
+.stagger-item:nth-child(10) { animation-delay: 0.5s; }
+
+/* 按钮按压效果 */
+button {
+    transition: transform 0.15s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+button:active:not(:disabled) {
+    transform: scale(0.95);
+}
+
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* ========== 表单验证样式 ========== */
+.form-group {
+    position: relative;
+    margin-bottom: 12px;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    background: white;
+    margin-bottom: 0;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: #1e3c72;
+    box-shadow: 0 0 0 3px rgba(30, 60, 114, 0.1);
+}
+
+.form-group input.valid {
+    border-color: #10b981;
+}
+
+.form-group input.invalid {
+    border-color: #ef4444;
+}
+
+.form-group input.checking {
+    border-color: #f59e0b;
+}
+
+/* 字段反馈信息 */
+.field-feedback {
+    margin-top: 4px;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 18px;
+    opacity: 0;
+    transform: translateY(-3px);
+    transition: all 0.2s ease;
+}
+
+.field-feedback.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.field-feedback.success {
+    color: #10b981;
+}
+
+.field-feedback.error {
+    color: #ef4444;
+}
+
+.field-feedback.loading {
+    color: #f59e0b;
+}
+
+/* 密码强度指示器 */
+.password-strength {
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.strength-bar {
+    flex: 1;
+    height: 4px;
+    background: #e2e8f0;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.strength-fill {
+    height: 100%;
+    width: 0;
+    transition: all 0.3s ease;
+    border-radius: 2px;
+}
+
+.strength-fill.weak { width: 33%; background: #ef4444; }
+.strength-fill.medium { width: 66%; background: #f59e0b; }
+.strength-fill.strong { width: 100%; background: #10b981; }
+
+.strength-text {
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+    min-width: 60px;
+    text-align: right;
+}
+
+.strength-text.weak { color: #ef4444; }
+.strength-text.medium { color: #f59e0b; }
+.strength-text.strong { color: #10b981; }
+
+/* 密码要求清单 */
+.password-requirements {
+    margin: 8px 0 16px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+}
+
+.requirement {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    font-size: 0.82rem;
+    color: #94a3b8;
+    transition: all 0.2s ease;
+}
+
+.requirement:last-child {
+    margin-bottom: 0;
+}
+
+.requirement i {
+    font-size: 0.6rem;
+    transition: all 0.2s ease;
+    width: 14px;
+    text-align: center;
+}
+
+.requirement.met {
+    color: #10b981;
+}
+
+.requirement.met i {
+    font-size: 0.75rem;
+}
+
+.requirement.unmet {
+    color: #ef4444;
+}
+
+/* 输入框动画 */
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-6px); }
+    40%, 80% { transform: translateX(6px); }
+}
+
+.form-group input.shake {
+    animation: shake 0.4s ease;
+}
+
+/* 成功图标 */
+.input-icon {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.1rem;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.input-icon.show {
+    opacity: 1;
+}
+
+/* 注册按钮 - 与模态框按钮风格统一 */
+#doRegisterBtn {
+    width: 100%;
+    background: #1e3c72;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 30px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+#doRegisterBtn:hover:not(:disabled) {
+    background: #2a5298;
+    transform: translateY(-1px);
+}
+
+#doRegisterBtn:disabled {
+    background: #94a3b8;
+    cursor: not-allowed;
+}
+
+#backToLoginBtn {
+    width: 100%;
+    background: white;
+    color: #1e3c72;
+    border: 2px solid #1e3c72;
+    padding: 8px 16px;
+    border-radius: 30px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 500;
+}
+
+#backToLoginBtn:hover {
+    background: #f0f4f8;
+    transform: translateY(-1px);
+}
+
+/* 表单过渡 */
+#loginForm, #registerForm {
+    transition: opacity 0.3s ease;
+}
+
+#loginForm.hidden, #registerForm.hidden {
+    display: none;
+}
+
+/* 登录表单按钮样式统一 */
+#doLoginBtn {
+    width: 100%;
+    background: #1e3c72;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 30px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+#doLoginBtn:hover {
+    background: #2a5298;
+    transform: translateY(-1px);
+}
+
+#showRegisterBtn {
+    width: 100%;
+    background: white;
+    color: #1e3c72;
+    border: 2px solid #1e3c72;
+    padding: 8px 16px;
+    border-radius: 30px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 500;
+}
+
+#showRegisterBtn:hover {
+    background: #f0f4f8;
+    transform: translateY(-1px);
+}

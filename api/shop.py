@@ -10,6 +10,29 @@ from zoneinfo import ZoneInfo
 
 router = APIRouter(prefix="/shop", tags=["shop"])
 
+@router.get("/order/public/{order_id}")
+def query_order_public(order_id: str, db: Session = Depends(get_db)):
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在，请检查订单号是否正确")
+    if order.created_at:
+        if order.created_at.tzinfo is None:
+            utc_dt = order.created_at.replace(tzinfo=ZoneInfo("UTC"))
+        else:
+            utc_dt = order.created_at
+        beijing_dt = utc_dt.astimezone(ZoneInfo("Asia/Shanghai"))
+        created_at_str = beijing_dt.strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        created_at_str = ""
+    return {
+        "order_id": order.id,
+        "product_name": order.product_name,
+        "quantity": order.quantity,
+        "total_price": order.total_price,
+        "status": order.status,
+        "created_at": created_at_str
+    }
+
 @router.get("/products")
 def list_products(db: Session = Depends(get_db)):
     products = db.query(Product).all()

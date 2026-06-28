@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
+from zoneinfo import ZoneInfo
 from .database import get_db
 from .db import FAQ, Conversation, User, Product, Order
 from .auth import hash_password, verify_admin, get_current_user
@@ -58,8 +59,17 @@ async def get_conversations(
 
     items = []
     for conv, username in records:
+        if conv.timestamp:
+            if conv.timestamp.tzinfo is None:
+                utc_dt = conv.timestamp.replace(tzinfo=ZoneInfo("UTC"))
+            else:
+                utc_dt = conv.timestamp
+            beijing_dt = utc_dt.astimezone(ZoneInfo("Asia/Shanghai"))
+            timestamp_str = beijing_dt.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            timestamp_str = ""
         items.append({
-            "timestamp": conv.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            "timestamp": timestamp_str,
             "user_id": conv.user_id,
             "username": username or "游客",
             "session_id": conv.session_id,
@@ -171,6 +181,15 @@ async def get_all_orders(
     )
     items = []
     for order, username in orders:
+        if order.created_at:
+            if order.created_at.tzinfo is None:
+                utc_dt = order.created_at.replace(tzinfo=ZoneInfo("UTC"))
+            else:
+                utc_dt = order.created_at
+            beijing_dt = utc_dt.astimezone(ZoneInfo("Asia/Shanghai"))
+            created_at_str = beijing_dt.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            created_at_str = None
         items.append({
             "order_id": order.id,
             "username": username,
@@ -178,7 +197,7 @@ async def get_all_orders(
             "quantity": order.quantity,
             "total_price": order.total_price,
             "status": order.status,
-            "created_at": order.created_at.strftime("%Y-%m-%d %H:%M:%S") if order.created_at else None
+            "created_at": created_at_str
         })
 
     return {

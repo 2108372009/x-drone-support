@@ -1,6 +1,7 @@
 import uuid
 import hashlib
 import os
+import re
 import jwt
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Header
@@ -17,6 +18,8 @@ ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+USERNAME_PATTERN = re.compile(r'^[\u4e00-\u9fa5a-zA-Z0-9_]+$')
 
 class RegisterRequest(BaseModel):
     username: str
@@ -84,6 +87,27 @@ def verify_admin(current_user: User = Depends(get_current_user), db: Session = D
         raise HTTPException(status_code=403, detail="无权限，仅管理员可访问")
     return current_user
 
+class CheckUsernameRequest(BaseModel):
+    username: str
+
+@router.post("/check-username")
+def check_username(req: CheckUsernameRequest, db: Session = Depends(get_db)):
+    """检查用户名是否可用"""
+    # 验证格式
+    if len(req.username) < 3:
+        return {"available": False, "message": "用户名至少需要3个字符"}
+    if len(req.username) > 20:
+        return {"available": False, "message": "用户名最多20个字符"}
+    if not USERNAME_PATTERN.match(req.username):
+        return {"available": False, "message": "只能包含中文、字母、数字和下划线"}
+    
+    # 检查是否已被占用
+    existing = db.query(User).filter(User.username == req.username).first()
+    if existing:
+        return {"available": False, "message": "该用户名已被占用"}
+    
+    return {"available": True, "message": "用户名可用"}
+
 @router.post("/register")
 def register(req: RegisterRequest, db: Session = Depends(get_db)):
     # 密码长度验证：6-20位
@@ -95,7 +119,7 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="两次输入的密码不一致")
     existing = db.query(User).filter(User.username == req.username).first()
     if existing:
-        raise HTTPException(status_code=409, detail="改昵称已被占用，换一个试试呢亲～")
+        raise HTTPException(status_code=409, detail="该昵称已被占用，换一个试试呢～")
     user_id = f"usr_{uuid.uuid4().hex[:12]}"
     new_user = User(
         id=user_id,
