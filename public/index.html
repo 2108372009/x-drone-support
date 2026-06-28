@@ -66,6 +66,9 @@
         <h3 class="collapsible-header" id="toggleLogBtn">
             <i class="fas fa-chevron-down arrow-icon" id="logArrow"></i> 
             <span>最近对话记录</span>
+            <button onclick="refreshAdminData()" style="margin-left: auto; background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">
+                <i class="fas fa-sync-alt"></i> 刷新数据
+            </button>
         </h3>
         <div id="logContainer" class="collapsible-container" style="overflow-x:auto;">
             <table id="logTable">

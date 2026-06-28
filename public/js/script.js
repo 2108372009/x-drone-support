@@ -196,6 +196,11 @@ async function sendMessage() {
     userInput.value = '';
     userInput.style.height = 'auto';
     showTypingIndicator();
+    
+    // 清除后台缓存，这样聊天后回到后台会自动刷新
+    adminDataCache.loaded = false;
+    adminDataCache.logs = null;
+    
     try {
         const res = await fetch(`${API_BASE}/api/chat`, {
             method: 'POST',
@@ -784,6 +789,22 @@ let adminDataCache = {
     ordersPage: 1
 };
 
+// ==================== 刷新后台数据 ====================
+window.refreshAdminData = function() {
+    if (adminAccessDenied) {
+        showToast('无权限访问后台', 'error');
+        return;
+    }
+    showToast('正在刷新数据...', 'warning');
+    adminDataCache.loaded = false;
+    loadAdminData(true).then(() => {
+        showToast('数据已刷新', 'success');
+    }).catch(err => {
+        console.error(err);
+        showToast('刷新失败', 'error');
+    });
+};
+
 // ==================== 分页状态 ====================
 let logsPage = 1;
 let logsPageSize = 20;
@@ -1064,15 +1085,24 @@ function switchTab(tabId) {
         }
         // 否则尝试加载后台数据
         adminView.classList.remove('hidden');
+        
+        // 如果之前有聊天过（缓存被清除），强制刷新
+        const needRefresh = !adminDataCache.loaded || adminDataCache.logs === null;
+        
         // 只有在没有缓存时才显示"加载中..."
-        if (!adminDataCache.loaded) {
+        if (needRefresh) {
             const tables = ['#logTable tbody', '#productTable tbody', '#adminOrderTable tbody', '#faqTable tbody'];
             tables.forEach(sel => {
                 const el = document.querySelector(sel);
                 if (el) el.innerHTML = '<tr><td colspan="10" style="text-align:center;">加载中...</td></tr>';
             });
         }
-        loadAdminData().catch(err => console.error(err));
+        // 如果需要刷新（之前有聊天过），强制从API获取最新数据
+        if (needRefresh) {
+            loadAdminData(true).catch(err => console.error(err));
+        } else {
+            loadAdminData(false).catch(err => console.error(err));
+        }
     }
 }
 
