@@ -11,7 +11,10 @@ from .db import User
 
 import bcrypt
 
-SECRET_KEY = os.getenv("JWT_SECRET", "x-drone-secret-key-change-in-prod")
+# 安全修复：强制要求配置JWT密钥
+SECRET_KEY = os.getenv("JWT_SECRET")
+if not SECRET_KEY:
+    raise ValueError("⚠️ 安全警告：必须在环境变量中设置 JWT_SECRET！请参考 .env.example 文件配置")
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
 
@@ -78,11 +81,16 @@ def verify_admin(current_user: User = Depends(get_current_user), db: Session = D
 
 @router.post("/register")
 def register(req: RegisterRequest, db: Session = Depends(get_db)):
+    # 密码长度验证：6-10位
+    if len(req.password) < 6:
+        raise HTTPException(status_code=400, detail="密码太短了亲，至少需要6位哦～")
+    if len(req.password) > 10:
+        raise HTTPException(status_code=400, detail="密码太长了亲，最多只能10位哦～")
     if req.password != req.confirm_password:
         raise HTTPException(status_code=400, detail="两次输入的密码不一致")
     existing = db.query(User).filter(User.username == req.username).first()
     if existing:
-        raise HTTPException(status_code=400, detail="用户名已存在")
+        raise HTTPException(status_code=409, detail="改昵称已被占用，换一个试试呢亲～")
     user_id = f"usr_{uuid.uuid4().hex[:12]}"
     new_user = User(
         id=user_id,

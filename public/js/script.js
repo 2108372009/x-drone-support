@@ -401,8 +401,31 @@ async function handleRegister() {
     const password = document.getElementById('regPassword').value;
     const confirm = document.getElementById('regConfirmPassword').value;
 
-    if (!username || !password) {
-        showToast('请填写完整信息', 'warning');
+    // 检查昵称长度
+    if (!username) {
+        showToast('请输入昵称', 'warning');
+        return;
+    }
+    if (username.length < 2) {
+        showToast('昵称太短了亲，至少需要2个字符哦～', 'warning');
+        return;
+    }
+    if (username.length > 20) {
+        showToast('昵称太长了亲，最多只能20个字符哦～', 'warning');
+        return;
+    }
+
+    // 检查密码长度：6-10位
+    if (!password) {
+        showToast('请输入密码', 'warning');
+        return;
+    }
+    if (password.length < 6) {
+        showToast('密码太短了亲，至少需要6位哦～', 'warning');
+        return;
+    }
+    if (password.length > 10) {
+        showToast('密码太长了亲，最多只能10位哦～', 'warning');
         return;
     }
     if (password !== confirm) {
@@ -410,10 +433,11 @@ async function handleRegister() {
         return;
     }
 
+    // 密码必须包含字母和数字
     const hasLetter = /[a-zA-Z]/.test(password);
     const hasNumber = /\d/.test(password);
-    if (!hasLetter || !hasNumber || password.length < 6) {
-        showToast('密码必须同时包含字母和数字，且长度至少6位', 'warning');
+    if (!hasLetter || !hasNumber) {
+        showToast('密码必须同时包含字母和数字', 'warning');
         return;
     }
 
@@ -433,10 +457,101 @@ async function handleRegister() {
             registerSuccessModal.style.display = 'flex';
         } else {
             const err = await res.json();
-            showToast('注册失败：' + (err.detail || '请重试'), 'error');
+            
+            // 昵称重复（409状态码）- 显示友好的弹窗提示
+            if (res.status === 409) {
+                showDuplicateUsernameModal(username);
+            } else {
+                // 其他错误，显示toast提示
+                showToast(err.detail || '注册失败，请重试', 'error');
+            }
         }
     } catch(e) {
         showToast('网络错误，请稍后重试', 'error');
+    }
+}
+
+// 昵称重复提示弹窗
+function showDuplicateUsernameModal(suggestedUsername) {
+    // 创建弹窗
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.id = 'duplicateUsernameModal';
+    modal.style.cssText = `
+        display: flex;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+    `;
+    
+    // 生成建议的昵称
+    const suggestions = [
+        suggestedUsername + '2024',
+        suggestedUsername + '_flyer',
+        suggestedUsername + '_pro',
+        suggestedUsername + Math.floor(Math.random() * 999)
+    ];
+    
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 420px; text-align: center; border-radius: 24px; overflow: hidden;">
+            <div style="padding: 30px 20px;">
+                <div style="font-size: 64px; margin-bottom: 20px;">😢</div>
+                <h3 style="color: #1e3c72; margin-bottom: 16px; font-size: 1.4rem;">改昵称已被占用</h3>
+                <p style="color: #64748b; margin-bottom: 24px; line-height: 1.6;">
+                    亲，"<strong style="color: #dc2626;">${escapeHtml(suggestedUsername)}</strong>" 已经被其他小伙伴使用啦～<br>
+                    换一个试试呢？
+                </p>
+                
+                <div style="text-align: left; background: #f8fafc; padding: 16px; border-radius: 12px; margin-bottom: 20px;">
+                    <p style="color: #64748b; margin-bottom: 12px; font-size: 0.9rem;">试试这些建议：</p>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        ${suggestions.map(name => `
+                            <button onclick="useSuggestedUsername('${escapeHtml(name)}')" 
+                                    style="background: white; border: 2px solid #e2e8f0; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-size: 0.9rem; color: #1e3c72; transition: all 0.2s;">
+                                ${escapeHtml(name)}
+                            </button>
+                        `).join('')}
+                    </div>
+                </div>
+                
+                <button onclick="closeDuplicateModal()" 
+                        style="background: #1e3c72; color: white; border: none; padding: 14px 40px; border-radius: 30px; font-size: 1rem; cursor: pointer; box-shadow: 0 4px 12px rgba(30, 60, 114, 0.3);">
+                    我知道了，自己想想 😊
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // 点击弹窗外部关闭
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeDuplicateModal();
+        }
+    });
+}
+
+// 使用建议的昵称
+window.useSuggestedUsername = function(username) {
+    closeDuplicateModal();
+    // 清空并填入建议的昵称
+    document.getElementById('regUsername').value = username;
+    // 自动触发注册
+    showToast('已填入新昵称：' + username, 'success');
+};
+
+// 关闭昵称重复弹窗
+function closeDuplicateModal() {
+    const modal = document.getElementById('duplicateUsernameModal');
+    if (modal) {
+        modal.remove();
     }
 }
 
@@ -864,7 +979,12 @@ function renderOrdersFromCache() {
 window.deleteFaq = async function(question) {
     if (adminAccessDenied) return;
     try {
-        await fetchWithAdminToken(`${API_BASE}/api/admin/faqs?question=${encodeURIComponent(question)}`, { method: 'DELETE' });
+        // 安全修复：改为POST body传递参数
+        await fetchWithAdminToken(`${API_BASE}/api/admin/faqs`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question })  // 使用body传递
+        });
         // 从缓存中移除
         if (adminDataCache.faqs) {
             adminDataCache.faqs = adminDataCache.faqs.filter(f => f.question !== question);

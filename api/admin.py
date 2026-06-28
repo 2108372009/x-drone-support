@@ -14,6 +14,9 @@ class FAQItem(BaseModel):
     question: str
     answer: str
 
+class FAQDeleteRequest(BaseModel):
+    question: str  # 安全修复：改为POST body传递
+
 class ProductCreate(BaseModel):
     name: str
     description: str
@@ -89,8 +92,9 @@ async def save_faq(item: FAQItem, user: User = Depends(verify_admin), db: Sessio
     return {"message": "保存成功"}
 
 @router.delete("/admin/faqs")
-async def delete_faq(question: str, user: User = Depends(verify_admin), db: Session = Depends(get_db)):
-    db.query(FAQ).filter(FAQ.question == question).delete()
+async def delete_faq(req: FAQDeleteRequest, user: User = Depends(verify_admin), db: Session = Depends(get_db)):
+    # 安全修复：使用POST body传递参数，防止URL篡改
+    db.query(FAQ).filter(FAQ.question == req.question).delete()
     db.commit()
     invalidate_faq_cache()
     return {"message": "删除成功"}

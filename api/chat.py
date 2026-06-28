@@ -7,7 +7,7 @@ from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional  # 添加 Optional 导入
 from .database import get_db
 from .db import Conversation, FAQ, User
 from .auth import get_current_user
@@ -138,7 +138,7 @@ def get_conversation_history(db: Session, user_id: str, session_id: str, limit: 
         messages.append({"role": "assistant", "content": h.ai_reply})
     return messages
 
-def find_faq_match(db: Session, user_message: str) -> str | None:
+def find_faq_match(db: Session, user_message: str) -> Optional[str]:  # 使用兼容Python 3.9的语法
     msg_lower = user_message.lower().strip()
     now = time.time()
     if _faq_cache["dirty"] or now - _faq_cache["loaded_at"] > FAQ_CACHE_TTL:

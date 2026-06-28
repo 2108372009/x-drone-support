@@ -19,8 +19,12 @@ from api.shop import router as shop_router
 from api.db import Product, User
 from api.auth import hash_password
 
-INIT_ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "阮志男")
-INIT_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "222qqq")
+# 安全修复：强制要求配置管理员密码
+INIT_ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
+INIT_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
+
+if not INIT_ADMIN_USERNAME or not INIT_ADMIN_PASSWORD:
+    raise ValueError("⚠️ 安全警告：必须在环境变量中设置 ADMIN_USERNAME 和 ADMIN_PASSWORD！请参考 .env.example 文件配置")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -76,12 +80,17 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# 安全修复：限制CORS来源
+# 从环境变量读取允许的域名（多个域名用逗号分隔）
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:8000,http://localhost:3000")
+allowed_origins_list = [origin.strip() for origin in ALLOWED_ORIGINS.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins_list,  # 限制为具体域名
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],  # 限制方法
+    allow_headers=["Authorization", "Content-Type"],  # 限制请求头
 )
 
 @app.get("/health")
