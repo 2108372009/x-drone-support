@@ -197,9 +197,8 @@ async function sendMessage() {
     userInput.style.height = 'auto';
     showTypingIndicator();
     
-    // 清除后台缓存，这样聊天后回到后台会自动刷新
-    adminDataCache.loaded = false;
-    adminDataCache.logs = null;
+    // 标记后台数据需要刷新（下次进入后台时刷新）
+    adminDataCache.dirty = true;
     
     try {
         const res = await fetch(`${API_BASE}/api/chat`, {
@@ -796,8 +795,8 @@ window.refreshAdminData = function() {
         return;
     }
     showToast('正在刷新数据...', 'warning');
-    adminDataCache.loaded = false;
     loadAdminData(true).then(() => {
+        adminDataCache.dirty = false;
         showToast('数据已刷新', 'success');
     }).catch(err => {
         console.error(err);
@@ -846,6 +845,11 @@ async function loadAdminData(forceReload = false) {
     if (adminDataCache.loaded && !forceReload) {
         renderAdminDataFromCache();
         return;
+    }
+    
+    // 如果有缓存但需要强制刷新（dirty状态），先渲染旧数据，再静默刷新
+    if (adminDataCache.loaded && forceReload && adminDataCache.dirty) {
+        renderAdminDataFromCache();
     }
 
     try {
@@ -1086,20 +1090,27 @@ function switchTab(tabId) {
         // 否则尝试加载后台数据
         adminView.classList.remove('hidden');
         
-        // 如果之前有聊天过（缓存被清除），强制刷新
-        const needRefresh = !adminDataCache.loaded || adminDataCache.logs === null;
+        // 判断是否需要强制刷新
+        // - 没有缓存时：需要刷新
+        // - 有缓存但标记为dirty时（聊天后）：刷新一次，然后清除dirty标记
+        const needRefresh = !adminDataCache.loaded || adminDataCache.dirty;
         
         // 只有在没有缓存时才显示"加载中..."
-        if (needRefresh) {
+        // 有缓存但dirty时，先显示旧缓存，然后静默刷新
+        if (!adminDataCache.loaded) {
             const tables = ['#logTable tbody', '#productTable tbody', '#adminOrderTable tbody', '#faqTable tbody'];
             tables.forEach(sel => {
                 const el = document.querySelector(sel);
                 if (el) el.innerHTML = '<tr><td colspan="10" style="text-align:center;">加载中...</td></tr>';
             });
         }
-        // 如果需要刷新（之前有聊天过），强制从API获取最新数据
+        
+        // 加载数据
         if (needRefresh) {
-            loadAdminData(true).catch(err => console.error(err));
+            loadAdminData(true).then(() => {
+                // 刷新完成后清除dirty标记
+                adminDataCache.dirty = false;
+            }).catch(err => console.error(err));
         } else {
             loadAdminData(false).catch(err => console.error(err));
         }
