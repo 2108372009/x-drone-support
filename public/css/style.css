@@ -229,7 +229,9 @@ tr:hover { background: #e9ecef; }
 .input-area.small { display: flex; gap: 12px; margin-bottom: 12px; }
 .input-area.small input { flex: 1; padding: 8px 12px; border: 1px solid #ced4da; border-radius: 8px; }
 button.small { background: #28a745; border: none; color: white; padding: 8px 16px; border-radius: 8px; cursor: pointer; }
-button.delete-btn { background: #dc3545; border: none; color: white; padding: 4px 12px; border-radius: 6px; cursor: pointer; }
+button.delete-btn { background: #dc3545; border: none; color: white; padding: 4px 12px; border-radius: 6px; cursor: pointer; transition: all 0.2s ease; }
+button.delete-btn:hover { background: #b02a37; transform: scale(1.05); box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4); }
+button.delete-btn:active { transform: scale(0.95); }
 .modal {
     display: none;
     position: fixed; top:0; left:0;
@@ -332,10 +334,18 @@ button.delete-btn { background: #dc3545; border: none; color: white; padding: 4p
     box-shadow: 0 6px 16px rgba(30, 60, 114, 0.4);
 }
 .buy-btn:active { transform: scale(0.98); }
-.buy-btn:disabled { 
-    background: #cbd5e1; 
+.buy-btn:disabled,
+.buy-btn[disabled] { 
+    background: #94a3b8; 
     cursor: not-allowed; 
     box-shadow: none;
+    opacity: 0.7;
+    transform: none !important;
+}
+
+.stock.stock-out {
+    color: #dc2626;
+    font-weight: 500;
 }
 #ordersList { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
 .order-item { 
@@ -487,6 +497,26 @@ button.delete-btn { background: #dc3545; border: none; color: white; padding: 4p
 
 .collapsible-header.collapsed .arrow-icon {
     transform: rotate(-90deg);
+}
+
+/* ========== 打字机光标效果 ========== */
+.typing-cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background-color: currentColor;
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+}
+
+.typing-cursor.hidden {
+    display: none;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
 }
 
 /* ========== 打字指示器动画 ========== */
@@ -961,6 +991,18 @@ button.delete-btn { background: #dc3545; border: none; color: white; padding: 4p
     }
 }
 
+/* 视图淡入淡出过渡 */
+.view-fade {
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 300ms ease, transform 300ms ease;
+}
+
+.view-fade.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
 /* 表格行悬浮效果 */
 table tbody tr {
     transition: background-color 0.15s ease, transform 0.15s ease;
@@ -1336,4 +1378,132 @@ button:disabled {
 #showRegisterBtn:hover {
     background: #f0f4f8;
     transform: translateY(-1px);
+}
+
+/* ========== 表格加载状态 ========== */
+.table-loading-overlay {
+    position: relative;
+}
+
+.table-loading-overlay::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(2px);
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.table-loading-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    padding: 20px 32px;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(30, 60, 114, 0.15);
+}
+
+.table-loading-spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid #e2e8f0;
+    border-top-color: var(--primary, #1e3c72);
+    border-radius: 50%;
+    animation: tableSpin 0.8s linear infinite;
+}
+
+@keyframes tableSpin {
+    to { transform: rotate(360deg); }
+}
+
+.table-loading-text {
+    color: #475569;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+/* 分页容器样式优化 */
+.pagination-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    margin-top: 16px;
+    padding: 14px 20px;
+    background: #f8fafc;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+}
+
+.pagination-btn {
+    background: linear-gradient(135deg, var(--primary, #1e3c72), var(--primary-light, #2a5298));
+    color: white;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 24px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(30, 60, 114, 0.2);
+}
+
+.pagination-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(30, 60, 114, 0.3);
+}
+
+.pagination-btn:active:not(:disabled) {
+    transform: scale(0.95);
+}
+
+.pagination-btn:disabled {
+    background: #cbd5e1;
+    cursor: not-allowed;
+    box-shadow: none;
+    opacity: 0.7;
+}
+
+.pagination-info {
+    color: #475569;
+    font-size: 0.9rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.pagination-info .current-page {
+    color: var(--primary, #1e3c72);
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.pagination-info .total-pages {
+    color: #64748b;
+}
+
+/* 后台管理视图滚动优化 */
+#adminView {
+    scroll-behavior: smooth;
+}
+
+/* 表格容器滚动优化 */
+.admin-table-wrapper {
+    position: relative;
+    overflow-x: auto;
+    scroll-behavior: smooth;
 }
