@@ -62,22 +62,30 @@
 
     <!-- 后台管理视图 -->
     <div id="adminView" class="hidden view-container">
-        <!-- 最近对话记录（折叠） -->
-        <h3 class="collapsible-header collapsed" id="toggleLogBtn">
-            <i class="fas fa-chevron-down arrow-icon" id="logArrow"></i> 
-            <span>最近对话记录</span>
-            <button onclick="refreshAdminData()" style="margin-left: auto; background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">
-                <i class="fas fa-sync-alt"></i> 刷新数据
-            </button>
+        <!-- 订单管理（放在最前面，方便查看） -->
+        <h3 class="collapsible-header" id="toggleOrderBtn">
+            <i class="fas fa-chevron-down arrow-icon" id="orderArrow"></i>
+            <span><i class="fas fa-shopping-cart"></i> 订单管理</span>
         </h3>
-        <div id="logContainer" class="collapsible-container collapsed" style="overflow-x:auto;">
-            <table id="logTable">
-                <thead><tr><th>时间</th><th>用户</th><th>会话ID</th><th>提问</th><th>AI回复</th></tr></thead>
+        <div id="orderContainer" class="collapsible-container" style="overflow-x:auto;">
+            <table id="adminOrderTable">
+                <thead>
+                    <tr>
+                        <th>订单号</th>
+                        <th>用户</th>
+                        <th>商品</th>
+                        <th>数量</th>
+                        <th>总价</th>
+                        <th>状态</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
                 <tbody></tbody>
             </table>
-            <div id="logsPagination"></div>
+            <div id="ordersPagination"></div>
         </div>
 
+        <!-- 商品库存管理 -->
         <h3><i class="fas fa-boxes"></i> 商品库存管理</h3>
         <div id="productManagement" style="margin-bottom: 16px;">
             <table id="productTable" style="width:100%; margin-bottom: 12px;">
@@ -108,27 +116,20 @@
             </div>
         </div>
 
-        <!-- 订单管理（折叠） -->
-        <h3 class="collapsible-header" id="toggleOrderBtn">
-            <i class="fas fa-chevron-down arrow-icon" id="orderArrow"></i>
-            <span>订单管理</span>
+        <!-- 最近对话记录（折叠） -->
+        <h3 class="collapsible-header collapsed" id="toggleLogBtn">
+            <i class="fas fa-chevron-down arrow-icon" id="logArrow"></i> 
+            <span><i class="fas fa-comments"></i> 最近对话记录</span>
+            <button onclick="refreshAdminData()" style="margin-left: auto; background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">
+                <i class="fas fa-sync-alt"></i> 刷新数据
+            </button>
         </h3>
-        <div id="orderContainer" class="collapsible-container" style="overflow-x:auto;">
-            <table id="adminOrderTable">
-                <thead>
-                    <tr>
-                        <th>订单号</th>
-                        <th>用户</th>
-                        <th>商品</th>
-                        <th>数量</th>
-                        <th>总价</th>
-                        <th>状态</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
+        <div id="logContainer" class="collapsible-container collapsed" style="overflow-x:auto;">
+            <table id="logTable">
+                <thead><tr><th>时间</th><th>用户</th><th>会话ID</th><th>提问</th><th>AI回复</th></tr></thead>
                 <tbody></tbody>
             </table>
-            <div id="ordersPagination"></div>
+            <div id="logsPagination"></div>
         </div>
 
         <!-- 新增：管理员管理 -->

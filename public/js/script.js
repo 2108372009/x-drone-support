@@ -1214,6 +1214,14 @@ function init() {
             toggleLogBtn.classList.toggle('collapsed');
         });
     }
+    
+    // 确保对话记录初始折叠状态（兼容缓存）
+    const logContainer = document.getElementById('logContainer');
+    if (logContainer && !logContainer.classList.contains('collapsed')) {
+        logContainer.classList.add('collapsed');
+        if (toggleLogBtn) toggleLogBtn.classList.add('collapsed');
+    }
+    
     const toggleOrderBtn = document.getElementById('toggleOrderBtn');
     if (toggleOrderBtn && !toggleOrderBtn._listener) {
         toggleOrderBtn._listener = true;
@@ -1235,6 +1243,13 @@ function init() {
             container.classList.toggle('collapsed');
             toggleNewProductBtn.classList.toggle('collapsed');
         });
+    }
+    
+    // 确保上架新产品初始折叠状态
+    const newProductContainer = document.getElementById('newProductContainer');
+    if (newProductContainer && !newProductContainer.classList.contains('collapsed')) {
+        newProductContainer.classList.add('collapsed');
+        if (toggleNewProductBtn) toggleNewProductBtn.classList.add('collapsed');
     }
 
     document.querySelectorAll('.tab').forEach(tab => {
