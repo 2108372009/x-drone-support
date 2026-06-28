@@ -63,14 +63,14 @@
     <!-- 后台管理视图 -->
     <div id="adminView" class="hidden view-container">
         <!-- 最近对话记录（折叠） -->
-        <h3 class="collapsible-header" id="toggleLogBtn">
+        <h3 class="collapsible-header collapsed" id="toggleLogBtn">
             <i class="fas fa-chevron-down arrow-icon" id="logArrow"></i> 
             <span>最近对话记录</span>
             <button onclick="refreshAdminData()" style="margin-left: auto; background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">
                 <i class="fas fa-sync-alt"></i> 刷新数据
             </button>
         </h3>
-        <div id="logContainer" class="collapsible-container" style="overflow-x:auto;">
+        <div id="logContainer" class="collapsible-container collapsed" style="overflow-x:auto;">
             <table id="logTable">
                 <thead><tr><th>时间</th><th>用户</th><th>会话ID</th><th>提问</th><th>AI回复</th></tr></thead>
                 <tbody></tbody>
@@ -79,8 +79,8 @@
         </div>
 
         <h3><i class="fas fa-boxes"></i> 商品库存管理</h3>
-        <div id="productManagement" style="margin-bottom: 30px;">
-            <table id="productTable" style="width:100%; margin-bottom: 20px;">
+        <div id="productManagement" style="margin-bottom: 16px;">
+            <table id="productTable" style="width:100%; margin-bottom: 12px;">
                 <thead>
                     <tr>
                         <th>商品名称</th>
@@ -91,8 +91,11 @@
                 </thead>
                 <tbody></tbody>
             </table>
-            <div style="background:#f1f5f9; padding: 16px; border-radius: 16px;">
-                <h4>➕ 上架新产品</h4>
+            <div class="collapsible-header collapsed" id="toggleNewProductBtn" style="background: #f1f5f9; margin: 8px 0;">
+                <i class="fas fa-chevron-down arrow-icon" id="newProductArrow"></i>
+                <h4 style="margin: 0; font-size: 0.95rem; color: var(--primary);">➕ 上架新产品</h4>
+            </div>
+            <div id="newProductContainer" class="collapsible-container collapsed" style="background:#f1f5f9; padding: 16px; border-radius: 0 0 16px 16px;">
                 <div style="display: flex; flex-wrap: wrap; gap: 12px;">
                     <input type="text" id="newProdName" placeholder="商品名称" style="flex:1; padding:8px;">
                     <input type="text" id="newProdDesc" placeholder="简短描述" style="flex:1; padding:8px;">

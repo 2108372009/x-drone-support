@@ -1224,6 +1224,18 @@ function init() {
             toggleOrderBtn.classList.toggle('collapsed');
         });
     }
+    
+    // 上架新产品折叠按钮
+    const toggleNewProductBtn = document.getElementById('toggleNewProductBtn');
+    if (toggleNewProductBtn && !toggleNewProductBtn._listener) {
+        toggleNewProductBtn._listener = true;
+        toggleNewProductBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const container = document.getElementById('newProductContainer');
+            container.classList.toggle('collapsed');
+            toggleNewProductBtn.classList.toggle('collapsed');
+        });
+    }
 
     document.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', () => switchTab(tab.getAttribute('data-tab')));
