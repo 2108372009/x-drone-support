@@ -1,36 +1,45 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+import time
+from collections import defaultdict
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from .database import get_db
+from .database import get_db, format_beijing_time
 from .db import Product, Order, User
 from .auth import get_current_user
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 router = APIRouter(prefix="/shop", tags=["shop"])
 
+_order_query_rate_limit = defaultdict(list)
+ORDER_QUERY_LIMIT = 10
+ORDER_QUERY_WINDOW = 60
+
+def _check_order_query_rate_limit(client_ip: str) -> bool:
+    """检查订单查询频率，返回 True 表示允许查询"""
+    now = time.time()
+    timestamps = _order_query_rate_limit[client_ip]
+    timestamps[:] = [t for t in timestamps if now - t < ORDER_QUERY_WINDOW]
+    if len(timestamps) >= ORDER_QUERY_LIMIT:
+        return False
+    timestamps.append(now)
+    return True
+
 @router.get("/order/public/{order_id}")
-def query_order_public(order_id: str, db: Session = Depends(get_db)):
+def query_order_public(order_id: str, request: Request, db: Session = Depends(get_db)):
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_order_query_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="查询太频繁了，请稍后再试～")
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="订单不存在，请检查订单号是否正确")
-    if order.created_at:
-        if order.created_at.tzinfo is None:
-            utc_dt = order.created_at.replace(tzinfo=ZoneInfo("UTC"))
-        else:
-            utc_dt = order.created_at
-        beijing_dt = utc_dt.astimezone(ZoneInfo("Asia/Shanghai"))
-        created_at_str = beijing_dt.strftime("%Y-%m-%d %H:%M:%S")
-    else:
-        created_at_str = ""
     return {
         "order_id": order.id,
         "product_name": order.product_name,
         "quantity": order.quantity,
         "total_price": order.total_price,
         "status": order.status,
-        "created_at": created_at_str
+        "created_at": format_beijing_time(order.created_at)
     }
 
 @router.get("/products")
@@ -85,21 +94,12 @@ def my_orders(user: User = Depends(get_current_user), db: Session = Depends(get_
     ).order_by(Order.created_at.desc()).all()
     result = []
     for o in orders:
-        if o.created_at:
-            if o.created_at.tzinfo is None:
-                utc_dt = o.created_at.replace(tzinfo=ZoneInfo("UTC"))
-            else:
-                utc_dt = o.created_at
-            beijing_dt = utc_dt.astimezone(ZoneInfo("Asia/Shanghai"))
-            created_at_str = beijing_dt.strftime("%Y-%m-%d %H:%M:%S")
-        else:
-            created_at_str = ""
         result.append({
             "id": o.id,
             "product_name": o.product_name,
             "quantity": o.quantity,
             "total_price": o.total_price,
-            "created_at": created_at_str,
+            "created_at": format_beijing_time(o.created_at),
             "status": o.status
         })
     return result

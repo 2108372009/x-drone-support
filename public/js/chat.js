@@ -117,12 +117,12 @@ async function addMessage(role, text, isUser = false, useTypingEffect = false) {
         if (thumbsUp) thumbsUp.addEventListener('click', function() {
             this.classList.add('active');
             this.style.color = '#10b981';
-            alert('感谢您的认可！');
+            showToast('感谢您的认可！', 'success');
         });
         if (thumbsDown) thumbsDown.addEventListener('click', function() {
             this.classList.add('active');
             this.style.color = '#ef4444';
-            alert('很抱歉没能帮到您，我们会努力改进。');
+            showToast('很抱歉没能帮到您，我们会努力改进。', 'info');
         });
     }
 }
@@ -241,3 +241,32 @@ function sendQuickTip(msg) {
     userInput.value = msg;
     sendMessage();
 }
+
+function isMobile() {
+    return window.innerWidth <= 640;
+}
+
+function setupMobileInputScroll() {
+    if (!isMobile()) return;
+
+    const inputWrapper = document.querySelector('.input-wrapper');
+    
+    userInput.addEventListener('focus', function() {
+        setTimeout(() => {
+            inputWrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 150);
+    });
+
+    const modalInputs = document.querySelectorAll('.modal-body input, .modal-body textarea');
+    modalInputs.forEach(function(input) {
+        input.addEventListener('focus', function() {
+            const modal = this.closest('.modal');
+            if (!modal) return;
+            setTimeout(() => {
+                this.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 150);
+        });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', setupMobileInputScroll);

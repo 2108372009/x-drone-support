@@ -9,9 +9,12 @@
     --shadow-md: 0 8px 24px rgba(0,0,0,0.1);
     --shadow-lg: 0 12px 40px rgba(0,0,0,0.15);
     /* 安全区域适配 - iOS Safari */
+    --safe-area-inset-top: env(safe-area-inset-top, 0px);
     --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-inset-left: env(safe-area-inset-left, 0px);
+    --safe-area-inset-right: env(safe-area-inset-right, 0px);
 }
-* { margin: 0; padding: 0; box-sizing: border-box; }
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
 html {
     /* 增强Retina屏幕字体清晰度 */
     -webkit-font-smoothing: antialiased;
@@ -44,6 +47,7 @@ body {
     background: linear-gradient(135deg, var(--primary-dark), var(--primary));
     color: white;
     padding: 16px 24px;
+    padding-top: calc(16px + var(--safe-area-inset-top));
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -276,14 +280,50 @@ button.delete-btn:active { transform: scale(0.95); }
     .input-wrapper { 
         padding: 12px 16px;
         padding-bottom: calc(12px + var(--safe-area-inset-bottom));
+        transition: padding-bottom 0.2s ease;
     }
-    .input-wrapper textarea { font-size: 16px; min-height: 48px; }
+    .input-wrapper textarea { 
+        font-size: 16px; 
+        min-height: 48px;
+        padding: 14px 18px;
+    }
     .send-btn, .new-session-btn { width: 44px; height: 44px; }
     .tab { padding: 10px 12px; font-size: 0.85rem; }
     .chat-header { flex-direction: column; align-items: flex-start; gap: 12px; }
     .app-container { border-radius: 0; max-height: 100vh; height: 100vh; max-width: 100%; }
     .product-card { width: 100%; max-width: 300px; }
     .view-container { padding: 16px; }
+    
+    /* 移动端输入框统一优化 - 防止iOS缩放 */
+    input, textarea, select {
+        font-size: 16px;
+    }
+    
+    .modal-body input,
+    .modal-body textarea {
+        font-size: 16px;
+        padding: 12px 14px;
+    }
+    
+    .buy-action input {
+        font-size: 16px;
+        padding: 10px;
+        min-height: 44px;
+    }
+    
+    .form-group input {
+        font-size: 16px;
+        padding: 12px 14px;
+        min-height: 44px;
+    }
+    
+    #adminPasswordInput {
+        font-size: 16px;
+    }
+    
+    #orderIdInput {
+        font-size: 16px;
+    }
 }
 @keyframes fadeInUp {
     from { opacity: 0; transform: translateY(12px); }
@@ -416,15 +456,29 @@ button.delete-btn:active { transform: scale(0.95); }
 .modal-body button { background: #1e3c72; color: white; border: none; padding: 8px 16px; border-radius: 30px; margin-right: 8px; cursor: pointer; }
 /* 移动端模态框适配 */
 @media (max-width: 640px) {
+    .modal {
+        align-items: flex-start;
+        padding-top: 20px;
+    }
     .modal-content {
-        width: 90%;
-        margin: 10% auto;
+        width: 92%;
+        margin: 0 auto;
+        max-height: 85vh;
+    }
+    .modal-body {
+        padding: 16px;
+        -webkit-overflow-scrolling: touch;
+    }
+    .modal-body input,
+    .modal-body textarea {
+        font-size: 16px;
+        padding: 12px;
     }
     #adminPasswordModal .modal-content {
         width: 90%;
     }
     #adminPasswordInput {
-        font-size: 16px; /* 防止iOS缩放 */
+        font-size: 16px;
     }
     /* 后台表格横向滚动优化 */
     #adminView {
@@ -436,6 +490,137 @@ button.delete-btn:active { transform: scale(0.95); }
     .product-card {
         width: 100%;
         max-width: 280px;
+    }
+
+    /* ========== 后台管理表格移动端卡片式布局 ========== */
+
+    /* 通用卡片样式 - 所有后台表格 */
+    #adminView table,
+    .admin-table-wrapper table {
+        border: none;
+        box-shadow: none;
+    }
+
+    #adminView table thead,
+    .admin-table-wrapper table thead {
+        display: none;
+    }
+
+    #adminView table tbody tr,
+    .admin-table-wrapper table tbody tr {
+        display: block;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 16px;
+        margin-bottom: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        transition: all 0.2s ease;
+    }
+
+    #adminView table tbody tr:hover,
+    .admin-table-wrapper table tbody tr:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        border-color: #cbd5e1;
+        transform: translateY(-2px);
+    }
+
+    #adminView table tbody tr:nth-child(even),
+    .admin-table-wrapper table tbody tr:nth-child(even) {
+        background: white;
+    }
+
+    #adminView table td,
+    .admin-table-wrapper table td {
+        display: block;
+        border: none;
+        padding: 6px 0;
+        text-align: left;
+        position: relative;
+        padding-left: 90px;
+        min-height: 24px;
+        word-break: break-word;
+    }
+
+    #adminView table td::before,
+    .admin-table-wrapper table td::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 0;
+        top: 6px;
+        width: 80px;
+        font-weight: 600;
+        color: var(--primary, #1e3c72);
+        font-size: 0.8rem;
+    }
+
+    #adminView table td:last-child,
+    .admin-table-wrapper table td:last-child {
+        padding-left: 0;
+        padding-top: 10px;
+        margin-top: 6px;
+        border-top: 1px dashed #e2e8f0;
+    }
+
+    #adminView table td:last-child::before,
+    .admin-table-wrapper table td:last-child::before {
+        display: none;
+    }
+
+    /* 对话记录表 - logTable */
+    #logTable td:nth-child(1)::before { content: "时间："; }
+    #logTable td:nth-child(2)::before { content: "用户："; }
+    #logTable td:nth-child(3)::before { content: "会话ID："; }
+    #logTable td:nth-child(4)::before { content: "提问："; }
+    #logTable td:nth-child(5)::before { content: "AI回复："; }
+
+    /* 订单表 - adminOrderTable */
+    #adminOrderTable td:nth-child(1)::before { content: "订单号："; }
+    #adminOrderTable td:nth-child(2)::before { content: "用户："; }
+    #adminOrderTable td:nth-child(3)::before { content: "商品："; }
+    #adminOrderTable td:nth-child(4)::before { content: "数量："; }
+    #adminOrderTable td:nth-child(5)::before { content: "总价："; }
+    #adminOrderTable td:nth-child(6)::before { content: "状态："; }
+
+    /* 商品管理表 - productTable */
+    #productTable td:nth-child(1)::before { content: "商品名称："; }
+    #productTable td:nth-child(2)::before { content: "价格："; }
+    #productTable td:nth-child(3)::before { content: "当前库存："; }
+    #productTable td:nth-child(4)::before { content: "调整库存："; }
+
+    /* FAQ管理表 - faqTable */
+    #faqTable td:nth-child(1)::before { content: "问题："; }
+    #faqTable td:nth-child(2)::before { content: "答案："; }
+
+    /* 操作列按钮优化 */
+    #adminView table td:last-child button,
+    .admin-table-wrapper table td:last-child button {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* 订单状态徽章在卡片中调整 */
+    #adminOrderTable .order-status {
+        display: inline-block;
+        margin-top: 2px;
+    }
+
+    /* 折叠容器移除横向滚动 */
+    #logContainer,
+    #orderContainer {
+        overflow-x: visible !important;
+    }
+
+    /* 分页容器移动端优化 */
+    .pagination-container {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 12px;
+    }
+
+    .pagination-btn {
+        padding: 8px 16px;
+        font-size: 0.8rem;
     }
 }
 
@@ -1112,16 +1297,48 @@ select {
 
 /* 按钮按压效果 */
 button {
-    transition: transform 0.15s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+    transition: transform 0.15s ease, box-shadow 0.2s ease, background-color 0.2s ease, opacity 0.15s ease;
 }
 
 button:active:not(:disabled) {
-    transform: scale(0.95);
+    transform: scale(0.97);
+    opacity: 0.8;
 }
 
 button:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+}
+
+/* ========== 移动端触摸反馈优化 ========== */
+a, button, .tab, .quick-btn, .buy-btn, .product-card, .order-item,
+.collapsible-header, .feedback-buttons i, .history-btn, .small-btn,
+.empty-state-btn, .pagination-btn, .copy-icon, .quick-tip-btn,
+.order-id-text, .modal-header button {
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease;
+}
+
+a:active, button:active:not(:disabled), .tab:active, .quick-btn:active,
+.buy-btn:active:not(:disabled), .product-card:active, .order-item:active,
+.collapsible-header:active, .feedback-buttons i:active, .history-btn:active,
+.small-btn:active, .empty-state-btn:active, .pagination-btn:active:not(:disabled),
+.copy-icon:active, .quick-tip-btn:active, .order-id-text:active,
+.modal-header button:active {
+    transform: scale(0.97);
+    opacity: 0.8;
+}
+
+/* 移动端按钮最小点击区域 44x44px */
+@media (max-width: 640px) {
+    button, .tab, .quick-btn, .buy-btn, .history-btn, .small-btn,
+    .empty-state-btn, .pagination-btn, .feedback-buttons i {
+        min-height: 44px;
+        min-width: 44px;
+    }
+    
+    .feedback-buttons i {
+        padding: 10px 12px;
+    }
 }
 
 /* ========== 表单验证样式 ========== */

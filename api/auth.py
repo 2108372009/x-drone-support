@@ -2,9 +2,11 @@ import uuid
 import hashlib
 import os
 import re
+import time
+from collections import defaultdict
 import jwt
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from .database import get_db
@@ -20,6 +22,34 @@ TOKEN_EXPIRE_HOURS = 24
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 USERNAME_PATTERN = re.compile(r'^[\u4e00-\u9fa5a-zA-Z0-9_]+$')
+
+PASSWORD_MIN_LEN = 6
+PASSWORD_MAX_LEN = 20
+
+def validate_password(password: str) -> tuple[bool, str]:
+    """验证密码强度，返回 (是否通过, 错误信息)"""
+    if len(password) < PASSWORD_MIN_LEN:
+        return False, f"密码太短了亲，至少需要{PASSWORD_MIN_LEN}位哦～"
+    if len(password) > PASSWORD_MAX_LEN:
+        return False, f"密码太长了亲，最多只能{PASSWORD_MAX_LEN}位哦～"
+    if not re.search(r'[a-zA-Z]', password):
+        return False, "密码必须包含字母哦～"
+    if not re.search(r'\d', password):
+        return False, "密码必须包含数字哦～"
+    return True, ""
+
+_guest_rate_limit = defaultdict(list)
+GUEST_LIMIT_PER_HOUR = 5
+
+def _check_guest_rate_limit(client_ip: str) -> bool:
+    """检查游客登录频率，返回 True 表示允许"""
+    now = time.time()
+    timestamps = _guest_rate_limit[client_ip]
+    timestamps[:] = [t for t in timestamps if now - t < 3600]
+    if len(timestamps) >= GUEST_LIMIT_PER_HOUR:
+        return False
+    timestamps.append(now)
+    return True
 
 class RegisterRequest(BaseModel):
     username: str
@@ -110,11 +140,10 @@ def check_username(req: CheckUsernameRequest, db: Session = Depends(get_db)):
 
 @router.post("/register")
 def register(req: RegisterRequest, db: Session = Depends(get_db)):
-    # 密码长度验证：6-20位
-    if len(req.password) < 6:
-        raise HTTPException(status_code=400, detail="密码太短了亲，至少需要6位哦～")
-    if len(req.password) > 20:
-        raise HTTPException(status_code=400, detail="密码太长了亲，最多只能20位哦～")
+    # 密码强度验证
+    valid, err_msg = validate_password(req.password)
+    if not valid:
+        raise HTTPException(status_code=400, detail=err_msg)
     if req.password != req.confirm_password:
         raise HTTPException(status_code=400, detail="两次输入的密码不一致")
     existing = db.query(User).filter(User.username == req.username).first()
@@ -156,7 +185,10 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     return {"token": token, "user_id": user.id, "username": user.username}
 
 @router.post("/guest")
-def guest_login(db: Session = Depends(get_db)):
+def guest_login(request: Request, db: Session = Depends(get_db)):
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_guest_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="操作太频繁了，请稍后再试哦～")
     guest_name = f"guest_{uuid.uuid4().hex[:8]}"
     user_id = f"usr_{uuid.uuid4().hex[:12]}"
     new_user = User(

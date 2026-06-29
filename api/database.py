@@ -36,3 +36,19 @@ def get_db():
         yield db
     finally:
         db.close()
+
+from zoneinfo import ZoneInfo
+
+BEIJING_TZ = ZoneInfo("Asia/Shanghai")
+UTC_TZ = ZoneInfo("UTC")
+
+def format_beijing_time(dt, fmt="%Y-%m-%d %H:%M:%S"):
+    """将UTC时间转换为北京时间并格式化字符串"""
+    if not dt:
+        return ""
+    if dt.tzinfo is None:
+        utc_dt = dt.replace(tzinfo=UTC_TZ)
+    else:
+        utc_dt = dt
+    beijing_dt = utc_dt.astimezone(BEIJING_TZ)
+    return beijing_dt.strftime(fmt)
