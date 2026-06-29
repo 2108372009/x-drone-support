@@ -45,25 +45,43 @@ function showToast(message, type = 'error', duration = 3000) {
     }, duration);
 }
 
-function copyToClipboard(text) {
+function copyToClipboard(text, btn) {
     if (!text) return;
-    navigator.clipboard.writeText(text).then(() => {
-        showToast('已复制到剪贴板', 'success');
-    }).catch(() => {
+    const doCopy = () => {
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('已复制到剪贴板', 'success');
+                if (btn) {
+                    btn.classList.add('copied');
+                    setTimeout(() => btn.classList.remove('copied'), 1000);
+                }
+            }).catch(() => fallbackCopy());
+        } else {
+            fallbackCopy();
+        }
+    };
+    const fallbackCopy = () => {
         const textarea = document.createElement('textarea');
         textarea.value = text;
         textarea.style.position = 'fixed';
         textarea.style.left = '-9999px';
+        textarea.style.top = '0';
         document.body.appendChild(textarea);
+        textarea.focus();
         textarea.select();
         try {
             document.execCommand('copy');
             showToast('已复制到剪贴板', 'success');
+            if (btn) {
+                btn.classList.add('copied');
+                setTimeout(() => btn.classList.remove('copied'), 1000);
+            }
         } catch (e) {
             showToast('复制失败，请手动复制', 'error');
         }
         document.body.removeChild(textarea);
-    });
+    };
+    doCopy();
 }
 
 function setButtonLoading(btn, loading, loadingText = '处理中...') {

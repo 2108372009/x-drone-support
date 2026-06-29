@@ -440,6 +440,9 @@ button.delete-btn:active { transform: scale(0.95); }
 .copy-icon:hover {
     color: #1e3c72;
 }
+.copy-icon.copied, .order-id-text.copied {
+    color: #10b981 !important;
+}
 .order-item button { 
     background: #dc2626; 
     border: none; 

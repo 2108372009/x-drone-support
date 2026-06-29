@@ -121,11 +121,11 @@ async function loadOrders() {
             const dateStr = o.created_at || '时间未知';
             const orderId = o.id || o.order_id || '';
             return `
-                <div class="order-item card-hover ${animationClass}" ${!hasCache ? `style="animation-delay: ${index * 0.08}s;"` : ''}>
+                <div class="order-item card-hover ${animationClass}" ${!hasCache ? `style="animation-delay: ${index * 0.08}s;"` : ''} data-order-id="${escapeHtml(orderId)}">
                     <div class="order-id-row">
                         <span class="order-id-label">订单号：</span>
-                        <span class="order-id-text" title="点击复制" onclick="copyToClipboard('${orderId}')">${escapeHtml(orderId)}</span>
-                        <i class="far fa-copy copy-icon" title="点击复制" onclick="copyToClipboard('${orderId}')"></i>
+                        <span class="order-id-text copy-order-btn" title="点击复制">${escapeHtml(orderId)}</span>
+                        <i class="far fa-copy copy-icon copy-order-btn" title="点击复制"></i>
                     </div>
                     <div><strong>${escapeHtml(o.product_name)}</strong> × ${o.quantity}</div>
                     <div>总价 ${o.total_price}</div>
@@ -234,3 +234,16 @@ async function queryOrder() {
         `;
     }
 }
+
+// 事件委托：订单复制按钮
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('copy-order-btn')) {
+        const orderItem = e.target.closest('.order-item');
+        if (orderItem) {
+            const orderId = orderItem.getAttribute('data-order-id');
+            if (orderId) {
+                copyToClipboard(orderId, e.target);
+            }
+        }
+    }
+});
