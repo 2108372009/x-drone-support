@@ -416,32 +416,49 @@ button.delete-btn:active { transform: scale(0.95); }
     border-bottom: 1px solid #f1f5f9;
     margin-bottom: 4px;
 }
+.order-id-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.order-id-row:hover {
+    background: #f1f5f9;
+}
+.order-id-row:active {
+    transform: scale(0.98);
+}
+.order-id-row.copied {
+    background: #ecfdf5;
+}
+.order-id-row.copied .order-id-text,
+.order-id-row.copied .copy-icon {
+    color: #10b981 !important;
+}
 .order-id-label {
+    font-size: 0.85rem;
     color: #94a3b8;
     flex-shrink: 0;
 }
 .order-id-text {
     font-family: 'Courier New', monospace;
     color: #475569;
-    cursor: pointer;
     user-select: all;
-    transition: color 0.2s;
-}
-.order-id-text:hover {
-    color: #1e3c72;
+    flex: 1;
 }
 .copy-icon {
-    cursor: pointer;
     color: #94a3b8;
     font-size: 0.8rem;
     transition: color 0.2s;
     flex-shrink: 0;
 }
-.copy-icon:hover {
+.order-id-row:hover .copy-icon,
+.order-id-row:hover .order-id-text {
     color: #1e3c72;
-}
-.copy-icon.copied, .order-id-text.copied {
-    color: #10b981 !important;
 }
 .order-item button { 
     background: #dc2626; 
