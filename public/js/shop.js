@@ -115,17 +115,18 @@ async function loadOrders() {
             return; 
         }
         
-        const animationClass = hasCache ? '' : 'stagger-item fade-in-up';
+        // 减弱订单列表动画效果
+        const animationClass = hasCache ? '' : 'fade-in-up';
         
         container.innerHTML = orders.map((o, index) => {
             const dateStr = o.created_at || '时间未知';
             const orderId = o.id || o.order_id || '';
             return `
-                <div class="order-item card-hover ${animationClass}" ${!hasCache ? `style="animation-delay: ${index * 0.08}s;"` : ''} data-order-id="${escapeHtml(orderId)}">
-                    <div class="order-id-row">
+                <div class="order-item card-hover ${animationClass}" ${!hasCache ? `style="animation-delay: ${index * 0.03}s;"` : ''} data-order-id="${escapeHtml(orderId)}">
+                    <div class="order-id-row copy-order-row" title="点击复制订单号">
                         <span class="order-id-label">订单号：</span>
-                        <span class="order-id-text copy-order-btn" title="点击复制">${escapeHtml(orderId)}</span>
-                        <i class="far fa-copy copy-icon copy-order-btn" title="点击复制"></i>
+                        <span class="order-id-text">${escapeHtml(orderId)}</span>
+                        <i class="far fa-copy copy-icon"></i>
                     </div>
                     <div><strong>${escapeHtml(o.product_name)}</strong> × ${o.quantity}</div>
                     <div>总价 ${o.total_price}</div>
@@ -235,14 +236,15 @@ async function queryOrder() {
     }
 }
 
-// 事件委托：订单复制按钮
+// 事件委托：订单复制按钮 - 简化逻辑，任何点击都触发复制
 document.addEventListener('click', function(e) {
-    if (e.target.classList.contains('copy-order-btn')) {
-        const orderItem = e.target.closest('.order-item');
+    const copyRow = e.target.closest('.copy-order-row');
+    if (copyRow) {
+        const orderItem = copyRow.closest('.order-item');
         if (orderItem) {
             const orderId = orderItem.getAttribute('data-order-id');
             if (orderId) {
-                copyToClipboard(orderId, e.target);
+                copyToClipboard(orderId, copyRow);
             }
         }
     }
